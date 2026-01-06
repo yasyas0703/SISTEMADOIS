@@ -1,0 +1,362 @@
+'use client';
+
+import React, { useState } from 'react';
+import { X, FileText, Info, MoreVertical, Trash2 } from 'lucide-react';
+import { useSistema } from '@/app/context/SistemaContext';
+
+interface ModalSelecionarTemplateProps {
+  onClose: () => void;
+}
+
+export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemplateProps) {
+  const { departamentos, usuarioLogado } = useSistema();
+  
+  const [empresaSelecionada, setEmpresaSelecionada] = useState<any>(null);
+  const [responsavel, setResponsavel] = useState("");
+  const [templateSelecionado, setTemplateSelecionado] = useState<number | null>(null);
+  const [templateComTooltip, setTemplateComTooltip] = useState<number | null>(null);
+  const [templateComTooltipNome, setTemplateComTooltipNome] = useState<number | null>(null);
+  const [showMenuTemplate, setShowMenuTemplate] = useState<number | null>(null);
+
+  const templatesDisponiveis = [
+    {
+      id: 1,
+      nome: "a",
+      descricao: "Template para a",
+      fluxo_departamentos: [1, 2],
+      questionarios_por_departamento: {
+        1: [
+          { id: 1, label: "Pergunta 1", tipo: "text" },
+          { id: 2, label: "Pergunta 2", tipo: "text" }
+        ],
+        2: [
+          { id: 3, label: "Pergunta 3", tipo: "select" }
+        ]
+      },
+      criado_em: new Date("2026-01-06")
+    }
+  ];
+
+  const empresas = [
+    {
+      id: 1,
+      codigo: "695",
+      razao_social: "A. RIBEIRO EQUIPAMENTOS LTDA",
+      cnpj: "12.345.678/0001-90",
+      email: "contato@ribeiro.com.br",
+      telefone: "(11) 3000-0000"
+    }
+  ];
+
+  const handleCriar = () => {
+    if (!empresaSelecionada) {
+      alert("Selecione uma empresa");
+      return;
+    }
+
+    if (!templateSelecionado) {
+      alert("Selecione um template");
+      return;
+    }
+
+    console.log("Solicitação criada com template:", {
+      empresa: empresaSelecionada,
+      responsavel,
+      template: templateSelecionado
+    });
+
+    onClose();
+  };
+
+  const excluirTemplate = (templateId: number, templateNome: string) => {
+    if (!usuarioLogado || usuarioLogado.role !== "admin") {
+      alert("Apenas administradores podem excluir templates");
+      return;
+    }
+
+    if (confirm(`Tem certeza que deseja excluir o template "${templateNome}"?\n\nEsta ação não pode ser desfeita.`)) {
+      console.log("Template excluído:", templateId);
+      setShowMenuTemplate(null);
+    }
+  };
+
+  const formatarData = (data: Date | string) => {
+    const d = new Date(data);
+    return d.toLocaleDateString("pt-BR");
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-t-2xl sticky top-0 z-10">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-xl font-bold text-white">
+                📋 Nova Solicitação (Template)
+              </h3>
+              <p className="text-white opacity-90 text-sm mt-1">
+                Selecione um template e preencha os dados básicos
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleCriar();
+          }}
+          className="p-6 space-y-6"
+        >
+          <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
+            <h4 className="font-semibold text-purple-800 mb-4">Dados da Empresa</h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Selecionar Empresa Cadastrada <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={empresaSelecionada?.id || ""}
+                  onChange={(e) => {
+                    const empresaId = e.target.value;
+                    if (empresaId) {
+                      const empresa = empresas.find(emp => emp.id === parseInt(empresaId));
+                      setEmpresaSelecionada(empresa);
+                    } else {
+                      setEmpresaSelecionada(null);
+                    }
+                  }}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                  required
+                >
+                  <option value="">Selecione uma empresa</option>
+                  {empresas.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.codigo} - {emp.razao_social}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Responsável
+                </label>
+                <input
+                  type="text"
+                  value={responsavel}
+                  onChange={(e) => setResponsavel(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                  placeholder="Nome do responsável"
+                />
+              </div>
+            </div>
+
+            {empresaSelecionada && (
+              <div className="mt-3 bg-white rounded-lg p-3 border border-purple-200">
+                <div className="text-sm space-y-1">
+                  <p className="font-semibold text-gray-900">{empresaSelecionada.razao_social}</p>
+                  <p className="text-gray-600">📄 CNPJ: {empresaSelecionada.cnpj}</p>
+                  {responsavel && (
+                    <p className="text-gray-600">👤 Responsável: {responsavel}</p>
+                  )}
+                  {empresaSelecionada.email && (
+                    <p className="text-gray-600">📧 {empresaSelecionada.email}</p>
+                  )}
+                  {empresaSelecionada.telefone && (
+                    <p className="text-gray-600">📞 {empresaSelecionada.telefone}</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-cyan-50 rounded-xl p-4 border border-cyan-200">
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="font-semibold text-cyan-800">
+                Selecione o Template <span className="text-red-500">*</span>
+              </h4>
+              {usuarioLogado?.role === "admin" && (
+                <span className="text-xs text-gray-500">
+                  Admins: clique nos três pontos para excluir
+                </span>
+              )}
+            </div>
+
+            {templatesDisponiveis.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText size={48} className="mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-600 mb-2">Nenhum template disponível</p>
+                <p className="text-sm text-gray-500">
+                  Admins precisam criar templates primeiro
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {templatesDisponiveis.map(template => (
+                  <div
+                    key={template.id}
+                    className={`border-2 rounded-xl p-4 transition-all relative ${
+                      templateSelecionado === template.id
+                        ? 'border-cyan-500 bg-cyan-100'
+                        : 'border-gray-200 hover:border-cyan-300 cursor-pointer'
+                    }`}
+                  >
+                    <label className="cursor-pointer block">
+                      <input
+                        type="radio"
+                        name="template"
+                        value={template.id}
+                        checked={templateSelecionado === template.id}
+                        onChange={() => setTemplateSelecionado(template.id)}
+                        className="sr-only"
+                      />
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <FileText size={20} className="text-white" />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="relative">
+                            <h5
+                              className="font-bold text-lg text-cyan-700 mb-2 truncate cursor-help"
+                              onMouseEnter={() => setTemplateComTooltipNome(template.id)}
+                              onMouseLeave={() => setTemplateComTooltipNome(null)}
+                            >
+                              {template.nome}
+                            </h5>
+
+                            {templateComTooltipNome === template.id && (
+                              <div className="absolute bottom-full left-0 mb-2 w-64 bg-gray-900 text-white text-sm rounded-lg p-3 z-50 shadow-xl">
+                                <div className="font-semibold">{template.nome}</div>
+                                {template.descricao && (
+                                  <div className="text-gray-300 text-xs mt-1">{template.descricao}</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {template.descricao && (
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                              {template.descricao}
+                            </p>
+                          )}
+
+                          <div className="relative inline-block mt-2">
+                            <button
+                              type="button"
+                              onMouseEnter={() => setTemplateComTooltip(template.id)}
+                              onMouseLeave={() => setTemplateComTooltip(null)}
+                              className="text-xs text-cyan-600 hover:text-cyan-700 flex items-center gap-1"
+                            >
+                              <Info size={12} />
+                              Ver detalhes do fluxo
+                            </button>
+
+                            {templateComTooltip === template.id && (
+                              <div className="absolute bottom-full left-0 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg p-3 z-50 shadow-xl">
+                                <div className="font-semibold mb-2">Fluxo do Template:</div>
+                                <div className="space-y-2">
+                                  {template.fluxo_departamentos.map((deptId, index) => {
+                                    const dept = departamentos.find(d => d.id === deptId);
+                                    const perguntas = template.questionarios_por_departamento[deptId] || [];
+
+                                    return (
+                                      <div key={deptId} className="flex items-start gap-2">
+                                        <div className="bg-cyan-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
+                                          {index + 1}
+                                        </div>
+                                        <div className="flex-1">
+                                          <div className="font-medium">
+                                            {dept?.nome || `Departamento ${deptId}`}
+                                          </div>
+                                          <div className="text-cyan-300">
+                                            {perguntas.length} pergunta(s)
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <div className="border-t border-gray-700 mt-2 pt-2 text-cyan-300">
+                                  Total: {template.fluxo_departamentos.length} departamentos
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+                            <span>{template.fluxo_departamentos.length} departamentos</span>
+                            <span>•</span>
+                            <span>Criado em {formatarData(template.criado_em)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </label>
+
+                    {usuarioLogado?.role === "admin" && (
+                      <div className="absolute top-3 right-3">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowMenuTemplate(
+                              showMenuTemplate === template.id ? null : template.id
+                            );
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+
+                        {showMenuTemplate === template.id && (
+                          <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 z-50 min-w-[120px] overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                excluirTemplate(template.id, template.nome);
+                              }}
+                              className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                            >
+                              <Trash2 size={14} />
+                              <span>Excluir</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-4 pt-6 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-100 font-medium"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={!templateSelecionado || !empresaSelecionada}
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all"
+            >
+              Criar Solicitação
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
