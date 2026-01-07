@@ -1,0 +1,238 @@
+'use client';
+
+import React, { useState } from 'react';
+import { 
+  FileText, MessageSquare, Upload, X, ChevronDown, Star, Trash2, ArrowRight, CheckCircle
+} from 'lucide-react';
+import { Processo } from '@/app/types';
+import { formatarData } from '@/app/utils/helpers';
+
+interface ProcessoCardProps {
+  processo: Processo;
+  departamento: any;
+  onQuestionario: (processo: Processo) => void;
+  onDocumentos: (processo: Processo) => void;
+  onComentarios: (processo: Processo) => void;
+  onTags: (processo: Processo) => void;
+  onExcluir: (id: number) => Promise<void>;
+  onAvancar: (id: number) => Promise<void>;
+  onFinalizar: (id: number) => Promise<void>;
+  onVerDetalhes: (processo: Processo) => void;
+  comentarioCount?: number;
+  documentCount?: number;
+}
+
+export default function ProcessoCard({
+  processo,
+  departamento,
+  onQuestionario,
+  onDocumentos,
+  onComentarios,
+  onTags,
+  onExcluir,
+  onAvancar,
+  onFinalizar,
+  onVerDetalhes,
+  comentarioCount = 0,
+  documentCount = 0
+}: ProcessoCardProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [prioridade, setPrioridade] = useState<'alta' | 'media' | 'baixa'>(
+    (processo.prioridade?.toLowerCase() || 'media') as 'alta' | 'media' | 'baixa'
+  );
+
+  const getPriorityColor = (priority: 'alta' | 'media' | 'baixa') => {
+    switch (priority) {
+      case 'alta':
+        return 'bg-red-100 text-red-700 border-red-300';
+      case 'media':
+        return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+      case 'baixa':
+        return 'bg-green-100 text-green-700 border-green-300';
+      default:
+        return 'bg-gray-100 text-gray-700 border-gray-300';
+    }
+  };
+
+  const getPriorityEmoji = (priority: 'alta' | 'media' | 'baixa') => {
+    switch (priority) {
+      case 'alta':
+        return '🔴';
+      case 'media':
+        return '🟡';
+      case 'baixa':
+        return '🟢';
+      default:
+        return '⭕';
+    }
+  };
+
+  const handleExcluir = async () => {
+    setIsDeleting(true);
+    try {
+      await onExcluir(processo.id);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const priorityNumber = processo.status === 'finalizado' ? 0 : 
+    ((processo.departamentoAtualIndex || 0) + 1);
+  const totalDepts = processo.fluxoDepartamentos?.length || 1;
+
+  return (
+    <div 
+      draggable
+      className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all border border-gray-200 overflow-hidden flex flex-col h-full"
+    >
+      {/* Cabeçalho com nome da empresa */}
+      <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 
+              className="font-semibold text-gray-900 text-sm truncate cursor-help" 
+              title={processo.nomeServico || processo.nome || 'Serviço'}
+            >
+              {processo.nomeServico?.substring(0, 15)}...
+            </h3>
+            <p 
+              className="text-xs text-gray-600 truncate cursor-help" 
+              title={processo.nomeEmpresa}
+            >
+              {processo.nomeEmpresa}
+            </p>
+            <p 
+              className="text-xs text-gray-500 truncate cursor-help" 
+              title={processo.cliente || processo.email || ''}
+            >
+              {processo.cliente || processo.email || ''}
+            </p>
+          </div>
+
+          <div className="flex gap-1 flex-shrink-0">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onTags(processo);
+              }}
+              className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+              title="Gerenciar Tags"
+            >
+              <Star size={14} className="text-gray-600" />
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDocumentos(processo);
+              }}
+              className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+              title="Documentos"
+            >
+              <MessageSquare size={14} className="text-gray-600" />
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleExcluir();
+              }}
+              disabled={isDeleting}
+              className="p-1.5 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50"
+              title="Excluir"
+            >
+              <X size={14} className="text-red-600" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Prioridade com badge */}
+      <div className="px-4 py-2 bg-white border-b border-gray-100">
+        <div className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${getPriorityColor(prioridade)}`}>
+          {getPriorityEmoji(prioridade)} {prioridade.toUpperCase()}
+        </div>
+      </div>
+
+      {/* Data */}
+      <div className="px-4 py-2 border-b border-gray-100">
+        <p className="text-xs text-gray-600">
+          Desde: {formatarData(processo.criadoEm || processo.dataCriacao || new Date().toISOString())}
+        </p>
+      </div>
+
+      {/* Espaço flexível */}
+      <div className="flex-1"></div>
+
+      {/* Botões de ação */}
+      <div className="px-4 py-2 border-t border-gray-100 space-y-2">
+        {processo.status === 'em_andamento' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onQuestionario(processo);
+                }}
+                className="w-full bg-white border border-gray-300 text-gray-700 px-2 py-2 rounded-lg text-xs hover:bg-gray-50 transition-colors flex items-center justify-center gap-1 font-medium"
+                title="Formulário"
+              >
+                <FileText size={14} />
+                Form
+              </button>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDocumentos(processo);
+                }}
+                className="w-full bg-blue-500 text-white px-2 py-2 rounded-lg text-xs hover:bg-blue-600 transition-colors flex items-center justify-center gap-1 font-medium"
+                title="Documentos"
+              >
+                <Upload size={14} />
+                Docs
+              </button>
+            </div>
+
+            {/* Botão Avançar ou Finalizar */}
+            {processo.fluxoDepartamentos && processo.fluxoDepartamentos.length > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if ((processo.departamentoAtualIndex || 0) >= (processo.fluxoDepartamentos?.length || 1) - 1) {
+                    onFinalizar(processo.id);
+                  } else {
+                    onAvancar(processo.id);
+                  }
+                }}
+                className={`w-full px-2 py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1 font-medium text-white ${
+                  (processo.departamentoAtualIndex || 0) >= (processo.fluxoDepartamentos?.length || 1) - 1
+                    ? 'bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700'
+                    : 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700'
+                }`}
+              >
+                {(processo.departamentoAtualIndex || 0) >= (processo.fluxoDepartamentos?.length || 1) - 1 ? (
+                  <>
+                    <CheckCircle size={14} />
+                    Finalizar
+                  </>
+                ) : (
+                  <>
+                    <ArrowRight size={14} />
+                    Avançar ({priorityNumber}/{totalDepts})
+                  </>
+                )}
+              </button>
+            )}
+          </>
+        )}
+
+        {processo.status === 'finalizado' && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-xs text-center font-medium">
+            ✅ Finalizado
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

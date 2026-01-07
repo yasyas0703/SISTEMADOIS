@@ -2,126 +2,189 @@
 
 import React from 'react';
 import { X, Upload, File, Trash2, Download } from 'lucide-react';
-
-interface Documento {
-  id: number;
-  nome: string;
-  tamanho: string;
-  tipo: string;
-  dataUpload: Date;
-}
+import { Processo } from '@/app/types';
+import { useSistema } from '@/app/context/SistemaContext';
+import { formatarTamanhoParcela, formatarDataHora } from '@/app/utils/helpers';
+import ModalBase from './ModalBase';
 
 interface ModalUploadDocumentoProps {
-  processoId?: number;
+  processo?: Processo;
+  perguntaId?: number | null;
+  perguntaLabel?: string | null;
   onClose: () => void;
 }
 
 export default function ModalUploadDocumento({
-  processoId,
+  processo,
+  perguntaId = null,
+  perguntaLabel = null,
   onClose,
 }: ModalUploadDocumentoProps) {
-  const [documentos, setDocumentos] = React.useState<Documento[]>([
-    {
-      id: 1,
-      nome: 'Contrato_Social.pdf',
-      tamanho: '2.4 MB',
-      tipo: 'PDF',
-      dataUpload: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-    },
-    {
-      id: 2,
-      nome: 'RG_Socio.jpg',
-      tamanho: '1.2 MB',
-      tipo: 'Imagem',
-      dataUpload: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-    },
-  ]);
-
+  const { adicionarDocumentoProcesso, atualizarProcesso, adicionarNotificacao, mostrarAlerta } = useSistema();
   const [uploading, setUploading] = React.useState(false);
+  const [arquivos, setArquivos] = React.useState<Array<{ id: number; nome: string; tamanho: number; tipo: string; file: File }>>([]);
+  const [arrastando, setArrastando] = React.useState(false);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files) {
-      setUploading(true);
-      // Simulando upload
-      for (const file of files) {
-        setDocumentos([
-          ...documentos,
-          {
-            id: Math.max(...documentos.map((d) => d.id), 0) + 1,
-            nome: file.name,
-            tamanho: (file.size / 1024 / 1024).toFixed(1) + ' MB',
-            tipo: file.type.split('/')[1].toUpperCase() || 'Arquivo',
+  const documentos = processo?.documentos || [];
+  const documentosFiltrados = perguntaId
+    ? documentos.filter((d: any) => Number(d.perguntaId) === Number(perguntaId))
+    : documentos;
+
+  const handleArquivosSelecionados = (fileList: FileList | null) => {
+    if (!fileList) return;
+    const novos = Array.from(fileList).map((f, idx) => ({ id: Date.now() + idx, nome: f.name, tamanho: f.size, tipo: f.type || 'application/octet-stream', file: f }));
+    setArquivos(prev => [...prev, ...novos]);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setArrastando(false);
+    handleArquivosSelecionados(e.dataTransfer.files);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setArrastando(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setArrastando(false);
+  };
+
+  const enviar = async () => {
+    if (!processo || arquivos.length === 0) return;
+    setUploading(true);
+    let sucessos = 0;
+    let erros = 0;
+    try {
+      for (let i = 0; i < arquivos.length; i++) {
+        const a = arquivos[i];
+        try {
+          const url = URL.createObjectURL(a.file);
+          adicionarDocumentoProcesso(processo.id, {
+            id: Date.now() + i,
+            processoId: processo.id,
+            nome: a.nome,
+            tipo: a.tipo,
+            tamanho: a.tamanho,
+            url,
+            tipoCategoria: perguntaId ? 'questionario' : 'geral',
+            departamentoId: processo.departamentoAtual,
+            perguntaId: perguntaId ?? undefined,
             dataUpload: new Date(),
-          },
-        ]);
+          });
+          sucessos++;
+        } catch {
+          erros++;
+        }
       }
+      setArquivos([]);
+      if (sucessos > 0) {
+        adicionarNotificacao(sucessos === 1 ? '✅ Documento enviado com sucesso!' : `✅ ${sucessos} documentos enviados com sucesso!`, 'sucesso');
+        onClose();
+      }
+      if (erros > 0) {
+        await mostrarAlerta('Erro no Upload', `${erros} arquivo(s) não puderam ser enviados`, 'erro');
+      }
+    } finally {
       setUploading(false);
     }
   };
 
   const handleRemover = (id: number) => {
-    setDocumentos(documentos.filter((d) => d.id !== id));
+    if (!processo) return;
+    atualizarProcesso(processo.id, {
+      documentos: (processo.documentos || []).filter((d: any) => d.id !== id),
+    } as any);
+  };
+
+  const handleDownload = (doc: any) => {
+    try {
+      const a = document.createElement('a');
+      a.href = doc.url;
+      a.download = doc.nome;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch {
+      // noop
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl transform transition-all duration-300 max-h-96 overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
-          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <Upload size={24} />
-            Upload de Documentos
-          </h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <X size={24} />
-          </button>
+    <ModalBase isOpen onClose={onClose} labelledBy="upload-title" dialogClassName="w-full max-w-2xl bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none max-h-[90vh] overflow-y-auto" zIndex={1020}>
+      <div className="rounded-2xl">
+        <div className="bg-gradient-to-r from-cyan-500 to-blue-600 p-6 rounded-t-2xl sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 id="upload-title" className="text-xl font-bold text-white flex items-center gap-2">
+                <Upload size={20} />
+                {perguntaId ? 'Upload para Pergunta' : 'Upload de Documentos Gerais'}
+              </h2>
+              {perguntaLabel && (
+                <p className="text-white opacity-90 text-sm mt-1">Para: {perguntaLabel}</p>
+              )}
+            </div>
+            <button onClick={onClose} className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         <div className="p-6 space-y-6">
+          {processo && (
+            <div className="bg-cyan-50 dark:bg-[#0f2b34] rounded-xl p-4 border border-cyan-200 dark:border-[#155e75]">
+              <h4 className="font-semibold text-cyan-800 dark:text-cyan-200 mb-1">{processo.nomeEmpresa}</h4>
+              {processo.cliente && (
+                <p className="text-sm text-cyan-600 dark:text-cyan-300">Cliente: {processo.cliente}</p>
+              )}
+              {perguntaLabel && (
+                <p className="text-sm text-cyan-600 dark:text-cyan-300 mt-1"><strong>Pergunta:</strong> {perguntaLabel}</p>
+              )}
+            </div>
+          )}
+
           {/* Área de Upload */}
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-cyan-500 hover:bg-cyan-50 transition-colors cursor-pointer relative">
+          <div
+            className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${arrastando ? 'border-cyan-500 bg-cyan-50' : 'border-gray-300 hover:border-cyan-400 hover:bg-cyan-50'} cursor-pointer relative`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <input
               type="file"
               multiple
-              onChange={handleUpload}
+              onChange={(e) => handleArquivosSelecionados(e.target.files)}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
-            <Upload size={48} className="mx-auto text-gray-400 mb-2" />
-            <p className="font-semibold text-gray-900 mb-1">
-              {uploading ? 'Enviando...' : 'Clique ou arraste arquivos aqui'}
-            </p>
-            <p className="text-sm text-gray-600">
-              Formatos suportados: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG
-            </p>
+            <Upload size={48} className="mx-auto text-gray-400 dark:text-gray-300 mb-4" />
+            <p className="text-gray-600 dark:text-gray-200 mb-2">Arraste e solte os arquivos aqui, ou clique para selecionar</p>
+            <span className="inline-block bg-cyan-600 text-white px-4 py-2 rounded-lg">Selecionar Arquivos</span>
           </div>
 
-          {/* Lista de Documentos */}
-          {documentos.length > 0 && (
+          {/* Lista de selecionados */}
+          {arquivos.length > 0 && (
             <div className="space-y-2">
-              <h3 className="font-semibold text-gray-900">
-                Documentos Enviados ({documentos.length})
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                Arquivos Selecionados ({arquivos.length})
               </h3>
               <div className="space-y-2">
-                {documentos.map((doc) => (
+                {arquivos.map((a: any) => (
                   <div
-                    key={doc.id}
-                    className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    key={a.id}
+                    className="flex items-center justify-between p-4 border border-gray-200 dark:border-[var(--border)] rounded-lg hover:bg-gray-50 dark:hover:bg-[var(--muted)] transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <File size={20} className="text-gray-400" />
+                      <File size={20} className="text-gray-400 dark:text-gray-300" />
                       <div>
-                        <p className="font-medium text-gray-900 text-sm">{doc.nome}</p>
-                        <p className="text-xs text-gray-600">
-                          {doc.tamanho} • {doc.dataUpload.toLocaleDateString('pt-BR')}
-                        </p>
+                        <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">{a.nome}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300">{formatarTamanhoParcela(Number(a.tamanho || 0))}</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <button className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors">
-                        <Download size={18} />
-                      </button>
                       <button
-                        onClick={() => handleRemover(doc.id)}
+                        onClick={() => setArquivos(prev => prev.filter(x => x.id !== a.id))}
                         className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
                       >
                         <Trash2 size={18} />
@@ -133,17 +196,45 @@ export default function ModalUploadDocumento({
             </div>
           )}
 
-          {/* Botão de Fechar */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200">
-            <button
-              onClick={onClose}
-              className="w-full px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all font-medium"
-            >
-              Concluído
+          {/* Lista de Documentos já enviados (abaixo dos selecionados) */}
+          {documentosFiltrados.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                Documentos Enviados ({documentosFiltrados.length})
+              </h3>
+              <div className="space-y-2">
+                {documentosFiltrados.map((doc: any) => (
+                  <div key={doc.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-[var(--border)] rounded-lg hover:bg-gray-50 dark:hover:bg-[var(--muted)] transition-colors">
+                    <div className="flex items-center gap-3">
+                      <File size={20} className="text-gray-400 dark:text-gray-300" />
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">{doc.nome}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300">{formatarTamanhoParcela(Number(doc.tamanho || 0))} • {formatarDataHora(doc.dataUpload)}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => handleDownload(doc)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-[#132235] rounded transition-colors">
+                        <Download size={18} />
+                      </button>
+                      <button onClick={() => handleRemover(doc.id)} className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-[#3b1f26] rounded transition-colors">
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Ações */}
+          <div className="flex gap-4 pt-6 border-t border-gray-200 dark:border-[var(--border)]">
+            <button onClick={onClose} className="flex-1 px-6 py-3 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-[var(--border)] rounded-xl hover:bg-gray-100 dark:hover:bg-[var(--muted)]">Cancelar</button>
+            <button onClick={enviar} disabled={arquivos.length === 0 || uploading} className="flex-1 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+              {uploading ? 'Enviando...' : `Enviar ${arquivos.length} Documento(s)`}
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </ModalBase>
   );
 }

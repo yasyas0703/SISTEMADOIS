@@ -1,13 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useSistema, Processo, Departamento } from '@/app/context/SistemaContext';
+import React, { useState } from 'react';
+import { Plus, Building2, AlertCircle } from 'lucide-react';
+import { useSistema } from '@/app/context/SistemaContext';
+import { Processo, Departamento } from '@/app/types';
 import Header from '@/app/components/Header';
 import DashboardStats from '@/app/components/DashboardStats';
 import DepartamentosGrid from '@/app/components/sections/DepartamentosGrid';
 import Filtros from '@/app/components/sections/Filtros';
 import ListaProcessos from '@/app/components/sections/ListaProcessos';
 import SecaoAlertas from '@/app/components/sections/SecaoAlertas';
+import ProcessoDetalhado from '@/app/components/ProcessoDetalhado';
 import ModalLogin from '@/app/components/modals/ModalLogin';
 import ModalCriarDepartamento from '@/app/components/modals/ModalCriarDepartamento';
 import ModalNovaEmpresa from '@/app/components/modals/ModalNovaEmpresa';
@@ -18,10 +21,15 @@ import ModalListarEmpresas from '@/app/components/modals/ModalListarEmpresas';
 import ModalGerenciarTags from '@/app/components/modals/ModalGerenciarTags';
 import ModalComentarios from '@/app/components/modals/ModalComentarios';
 import ModalUploadDocumento from '@/app/components/modals/ModalUploadDocumento';
-import ModalQuestionario from '@/app/components/modals/ModalQuestionario';
 import ModalSelecionarTemplate from '@/app/components/modals/ModalSelecionarTemplate';
 import ModalVisualizacao from '@/app/components/modals/ModalVisualizacao';
 import GaleriaDocumentos from '@/app/components/modals/ModalGaleria';
+import ModalSelecionarTags from '@/app/components/modals/ModalSelecionarTags';
+import ModalQuestionarioProcesso from '@/app/components/modals/ModalQuestionarioProcesso';
+import ModalConfirmacao from '@/app/components/modals/ModalConfirmacao';
+import ModalAlerta from '@/app/components/modals/ModalAlerta';
+import ModalEditarQuestionarioSolicitacao from '@/app/components/modals/ModalEditarQuestionarioSolicitacao';
+import ModalPreviewDocumento from '@/app/components/modals/ModalPreviewDocumento';
 
 export default function Home() {
   const {
@@ -29,6 +37,7 @@ export default function Home() {
     setUsuarioLogado,
     processos,
     setProcessos,
+    empresas,
     departamentos,
     setDepartamentos,
     showCriarDepartamento,
@@ -43,12 +52,33 @@ export default function Home() {
     setShowListarEmpresas,
     showGerenciarTags,
     setShowGerenciarTags,
+    showSelecionarTags,
+    setShowSelecionarTags,
+    showQuestionario,
+    setShowQuestionario,
+    showQuestionarioSolicitacao,
+    setShowQuestionarioSolicitacao,
     showComentarios,
     setShowComentarios,
     showUploadDocumento,
     setShowUploadDocumento,
     showSelecionarTemplate,
     setShowSelecionarTemplate,
+    showConfirmacao,
+    setShowConfirmacao,
+    showAlerta,
+    setShowAlerta,
+    showCadastrarEmpresa,
+    setShowCadastrarEmpresa,
+    showGaleria,
+    setShowGaleria,
+    showPreviewDocumento,
+    setShowPreviewDocumento,
+    excluirProcesso,
+    avancarParaProximoDepartamento,
+    finalizarProcesso,
+    mostrarAlerta,
+    mostrarConfirmacao,
   } = useSistema();
 
   const [filtroStatus, setFiltroStatus] = useState('todos');
@@ -57,95 +87,69 @@ export default function Home() {
   const [filtroDepartamento, setFiltroDepartamento] = useState<number | null>(null);
   const [processoSelecionado, setProcessoSelecionado] = useState<Processo | null>(null);
   const [showVisualizacao, setShowVisualizacao] = useState<Processo | null>(null);
-  const [showGaleria, setShowGaleria] = useState(false);
-  const [showCadastrarEmpresa, setShowCadastrarEmpresa] = useState(false);
-
-  // Dados de exemplo para demo
-  useEffect(() => {
-    if (usuarioLogado && processos.length === 0) {
-      const processosDemo: Processo[] = [
-        {
-          id: 1,
-          nome: 'Abertura de Empresa - Documentação Completa',
-          empresa: 'Tech Solutions Ltda',
-          status: 'Em Andamento',
-          prioridade: 'ALTA',
-          departamentoAtual: 1,
-          criadoEm: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-          dataAtualizacao: new Date(),
-          dataEntrega: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
-          descricao: 'Solicitação de abertura de empresa com todos os documentos necessários',
-          tags: [1],
-          criadoPor: 'João Silva',
-        },
-        {
-          id: 2,
-          nome: 'Análise de Documentos - Compliance',
-          empresa: 'Investimentos Brasil SA',
-          status: 'Em Andamento',
-          prioridade: 'MEDIA',
-          departamentoAtual: 2,
-          criadoEm: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-          dataAtualizacao: new Date(),
-          dataEntrega: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          descricao: 'Análise de documentação para compliance regulatório',
-          tags: [3],
-          criadoPor: 'Maria Santos',
-        },
-        {
-          id: 3,
-          nome: 'Processo Finalizado - Empresa ABC',
-          empresa: 'ABC Consultoria',
-          status: 'Finalizado',
-          prioridade: 'BAIXA',
-          departamentoAtual: 3,
-          criadoEm: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-          dataAtualizacao: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-          descricao: 'Processo de abertura de empresa finalizado com sucesso',
-          tags: [2],
-          criadoPor: 'Pedro Costa',
-        },
-      ];
-
-      setProcessos(processosDemo);
-
-      const departamentosDemo: Departamento[] = [
-        {
-          id: 1,
-          nome: 'Recebimento',
-          descricao: 'Receção e validação de documentos',
-          cor: 'from-cyan-500 to-blue-600',
-          ativo: true,
-          criadoEm: new Date(),
-        },
-        {
-          id: 2,
-          nome: 'Análise',
-          descricao: 'Análise de documentação e conformidade',
-          cor: 'from-purple-500 to-pink-600',
-          ativo: true,
-          criadoEm: new Date(),
-        },
-        {
-          id: 3,
-          nome: 'Finalização',
-          descricao: 'Conclusão e entrega dos processos',
-          cor: 'from-green-500 to-emerald-600',
-          ativo: true,
-          criadoEm: new Date(),
-        },
-      ];
-
-      setDepartamentos(departamentosDemo);
-    }
-  }, [usuarioLogado, processos.length, setProcessos, setDepartamentos]);
+  const [showProcessoDetalhado, setShowProcessoDetalhado] = useState<Processo | null>(null);
+  const [departamentoEmEdicao, setDepartamentoEmEdicao] = useState<Departamento | null>(null);
 
   const handleLogin = (usuario: any) => {
     setUsuarioLogado(usuario);
   };
 
   const handleCriarDepartamento = (data: any) => {
-    setDepartamentos([...departamentos, data]);
+    setDepartamentos((prev) => {
+      const jaExiste = prev.some((d) => d.id === data.id);
+
+      const corNormalizada =
+        typeof data?.cor === 'string'
+          ? data.cor
+          : typeof data?.cor?.gradient === 'string'
+            ? data.cor.gradient
+            : 'from-cyan-500 to-blue-600';
+
+      const iconeNormalizado =
+        typeof data?.icone === 'function'
+          ? data.icone
+          : typeof data?.icone?.componente === 'function'
+            ? data.icone.componente
+            : null;
+
+      const payload = {
+        ...data,
+        cor: corNormalizada,
+        icone: iconeNormalizado,
+        criadoEm: data?.criadoEm || new Date(),
+      } as any;
+
+      if (jaExiste) {
+        return prev.map((d) => (d.id === data.id ? { ...d, ...payload } : d));
+      }
+
+      const proximoId = Math.max(0, ...prev.map((d) => Number(d.id) || 0)) + 1;
+      return [...prev, { ...payload, id: proximoId }];
+    });
+
+    setDepartamentoEmEdicao(null);
+    setShowCriarDepartamento(false);
+  };
+
+  const handleEditarDepartamento = (dept: Departamento) => {
+    setDepartamentoEmEdicao(dept);
+    setShowCriarDepartamento(true);
+  };
+
+  const handleExcluirDepartamento = (dept: Departamento) => {
+    void (async () => {
+      const ok = await mostrarConfirmacao({
+        titulo: 'Excluir Departamento',
+        mensagem: 'Tem certeza que deseja excluir este departamento?\n\nEssa ação não poderá ser desfeita.',
+        tipo: 'perigo',
+        textoConfirmar: 'Sim, Excluir',
+        textoCancelar: 'Cancelar',
+      });
+
+      if (ok) {
+        setDepartamentos((prev) => prev.filter((d) => d.id !== dept.id));
+      }
+    })();
   };
 
   const handleNovaEmpresa = (data: any) => {
@@ -158,12 +162,15 @@ export default function Home() {
     setShowVisualizacao(processo);
   };
 
+  const empresasCadastradasCount = (empresas || []).filter((e: any) => e?.cadastrada).length;
+  const empresasNovasCount = (empresas || []).filter((e: any) => e && e.cadastrada === false).length;
+
   if (!usuarioLogado) {
     return <ModalLogin onLogin={handleLogin} />;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-[var(--bg)] transition-colors">
       <Header
         onNovaEmpresa={() => setShowNovaEmpresa(true)}
         onPersonalizado={() => setShowNovaEmpresa(true)}
@@ -196,25 +203,35 @@ export default function Home() {
                 onClick={() => setShowCadastrarEmpresa(true)}
                 className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2"
               >
-                ➕ Cadastrar Empresa
+                <Plus size={18} />
+                Cadastrar Empresa
               </button>
               <button
                 onClick={() => setShowListarEmpresas('cadastradas')}
                 className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
               >
-                📋 Empresas (370)
+                <span className="inline-flex items-center gap-2">
+                  <Building2 size={18} />
+                  Empresas ({empresasCadastradasCount})
+                </span>
               </button>
               <button
                 onClick={() => setShowListarEmpresas('nao-cadastradas')}
                 className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
               >
-                ⚠️ Empresas Novas (1)
+                <span className="inline-flex items-center gap-2">
+                  <AlertCircle size={18} />
+                  Empresas Novas ({empresasNovasCount})
+                </span>
               </button>
               <button
                 onClick={() => setShowCriarDepartamento(true)}
                 className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
               >
-                ➕ Criar Departamento
+                <span className="inline-flex items-center gap-2">
+                  <Plus size={18} />
+                  Criar Departamento
+                </span>
               </button>
             </div>
           </div>
@@ -222,9 +239,10 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             <DepartamentosGrid
               onCriarDepartamento={() => setShowCriarDepartamento(true)}
-              onEditarDepartamento={() => {}}
-              onExcluirDepartamento={() => {}}
+              onEditarDepartamento={handleEditarDepartamento}
+              onExcluirDepartamento={handleExcluirDepartamento}
               onProcessoClicado={handleProcessoClicado}
+              onGaleria={(dept) => setShowGaleria(dept)}
             />
           </div>
         </div>
@@ -245,9 +263,44 @@ export default function Home() {
           filtroTags={filtroTags}
           filtroDepartamento={filtroDepartamento}
           departamentos={departamentos}
+          onComentarios={(processo) => setShowComentarios(processo.id)}
+          onQuestionario={(processo, options) =>
+            setShowQuestionario({
+              processoId: processo.id,
+              departamento: processo.departamentoAtual,
+              somenteLeitura: Boolean(options?.somenteLeitura) || processo.status === 'finalizado',
+            })
+          }
+          onDocumentos={(processo, options) => {
+            if (options?.abrirGaleria) {
+              const docs = (processo.documentos || []).length;
+              if (docs > 0) {
+                setShowGaleria({ processoId: processo.id, titulo: `Documentos - ${processo.nomeEmpresa || processo.empresa || 'Processo'}` });
+              } else {
+                void mostrarAlerta('Sem Documentos', 'Este processo não possui documentos anexados.', 'aviso');
+              }
+              return;
+            }
+            setShowUploadDocumento(processo);
+          }}
+          onTags={(processo) => setShowSelecionarTags(processo)}
+          onGerenciarTags={() => setShowGerenciarTags(true)}
+          onAvancar={(processo) => avancarParaProximoDepartamento(processo.id)}
+          onFinalizar={(processo) => finalizarProcesso(processo.id)}
           onExcluir={(processo) => {
-            console.log('Excluir processo:', processo.id);
-            // Implemente a lógica de exclusão aqui
+            void (async () => {
+              const ok = await mostrarConfirmacao({
+                titulo: 'Excluir Processo',
+                mensagem: 'Tem certeza que deseja excluir este processo?\n\nEssa ação não poderá ser desfeita.',
+                tipo: 'perigo',
+                textoConfirmar: 'Sim, Excluir',
+                textoCancelar: 'Cancelar',
+              });
+
+              if (ok) {
+                excluirProcesso(processo.id);
+              }
+            })();
           }}
         />
       </div>
@@ -257,6 +310,7 @@ export default function Home() {
         <ModalCriarDepartamento
           onClose={() => setShowCriarDepartamento(false)}
           onSave={handleCriarDepartamento}
+          departamento={departamentoEmEdicao as any}
         />
       )}
 
@@ -264,6 +318,10 @@ export default function Home() {
         <ModalNovaEmpresa
           onClose={() => setShowNovaEmpresa(false)}
         />
+      )}
+
+      {showCadastrarEmpresa && (
+        <ModalCadastrarEmpresa onClose={() => setShowCadastrarEmpresa(false)} />
       )}
 
       {showGerenciarUsuarios && (
@@ -275,7 +333,20 @@ export default function Home() {
       {showListarEmpresas && (
         <ModalListarEmpresas
           onClose={() => setShowListarEmpresas(null)}
-          tipo={showListarEmpresas as any}
+          tipo={(typeof showListarEmpresas === 'string' ? showListarEmpresas : showListarEmpresas.tipo) as any}
+          empresaIdInicial={
+            typeof showListarEmpresas === 'object' && showListarEmpresas
+              ? showListarEmpresas.empresaId
+              : undefined
+          }
+        />
+      )}
+
+      {showQuestionarioSolicitacao && (
+        <ModalEditarQuestionarioSolicitacao
+          processoId={showQuestionarioSolicitacao.processoId}
+          departamentoId={showQuestionarioSolicitacao.departamentoId}
+          onClose={() => setShowQuestionarioSolicitacao(null)}
         />
       )}
 
@@ -292,7 +363,48 @@ export default function Home() {
       )}
 
       {showUploadDocumento && (
-        <ModalUploadDocumento onClose={() => setShowUploadDocumento(null)} />
+        <ModalUploadDocumento
+          processo={
+            typeof showUploadDocumento === 'object' && showUploadDocumento?.id
+              ? processos.find((p) => p.id === showUploadDocumento.id)
+              : typeof showUploadDocumento === 'object'
+                ? showUploadDocumento
+                : undefined
+          }
+          perguntaId={
+            typeof showUploadDocumento === 'object' && showUploadDocumento?.perguntaId
+              ? showUploadDocumento.perguntaId
+              : null
+          }
+          perguntaLabel={
+            typeof showUploadDocumento === 'object' && showUploadDocumento?.perguntaLabel
+              ? showUploadDocumento.perguntaLabel
+              : null
+          }
+          onClose={() => setShowUploadDocumento(null)}
+        />
+      )}
+
+      {showGaleria && (
+        <GaleriaDocumentos
+          onClose={() => setShowGaleria(null)}
+          departamentoId={typeof showGaleria === 'object' ? showGaleria?.id : undefined}
+          processoId={typeof showGaleria === 'object' ? showGaleria?.processoId : undefined}
+          titulo={typeof showGaleria === 'object' ? showGaleria?.titulo : undefined}
+        />
+      )}
+
+      {showQuestionario && (
+        <ModalQuestionarioProcesso
+          processoId={showQuestionario.processoId}
+          departamentoId={showQuestionario.departamento}
+          somenteLeitura={showQuestionario.somenteLeitura || false}
+          onClose={() => setShowQuestionario(null)}
+        />
+      )}
+
+      {showSelecionarTags && (
+        <ModalSelecionarTags processo={showSelecionarTags} onClose={() => setShowSelecionarTags(null)} />
       )}
 
       {showSelecionarTemplate && (
@@ -308,11 +420,75 @@ export default function Home() {
         />
       )}
 
-      {showGaleria && <GaleriaDocumentos onClose={() => setShowGaleria(false)} />}
 
-      {showCadastrarEmpresa && (
-        <ModalCadastrarEmpresa
-          onClose={() => setShowCadastrarEmpresa(false)}
+
+      {/* Modal Processo Detalhado */}
+      {showProcessoDetalhado && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <ProcessoDetalhado
+            processo={showProcessoDetalhado}
+            departamentos={departamentos}
+            onClose={() => setShowProcessoDetalhado(null)}
+            onVerCompleto={() => {
+              setShowVisualizacao(showProcessoDetalhado);
+            }}
+            onComentarios={() => {
+              setShowComentarios(showProcessoDetalhado.id);
+            }}
+            onQuestionario={() => {
+              setShowQuestionario({
+                processoId: showProcessoDetalhado.id,
+                departamento: showProcessoDetalhado.departamentoAtual,
+              });
+            }}
+            onDocumentos={() => {
+              setShowUploadDocumento(showProcessoDetalhado);
+            }}
+            onAvancar={() => {
+              avancarParaProximoDepartamento(showProcessoDetalhado.id);
+              setShowProcessoDetalhado(null);
+            }}
+            onFinalizar={() => {
+              finalizarProcesso(showProcessoDetalhado.id);
+              setShowProcessoDetalhado(null);
+            }}
+          />
+        </div>
+      )}
+
+      {showConfirmacao && (
+        <ModalConfirmacao
+          titulo={showConfirmacao.titulo}
+          mensagem={showConfirmacao.mensagem}
+          tipo={showConfirmacao.tipo}
+          textoConfirmar={showConfirmacao.textoConfirmar}
+          textoCancelar={showConfirmacao.textoCancelar}
+          onConfirm={() => {
+            showConfirmacao.onConfirm?.();
+            setShowConfirmacao(null);
+          }}
+          onCancel={() => {
+            showConfirmacao.onCancel?.();
+            setShowConfirmacao(null);
+          }}
+        />
+      )}
+
+      {showAlerta && (
+        <ModalAlerta
+          titulo={showAlerta.titulo}
+          mensagem={showAlerta.mensagem}
+          tipo={showAlerta.tipo}
+          onClose={() => {
+            showAlerta.onClose?.();
+            setShowAlerta(null);
+          }}
+        />
+      )}
+      {showPreviewDocumento && (
+        <ModalPreviewDocumento
+          documento={showPreviewDocumento}
+          onClose={() => setShowPreviewDocumento(null)}
         />
       )}
     </div>

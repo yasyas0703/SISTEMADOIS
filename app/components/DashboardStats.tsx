@@ -3,12 +3,14 @@
 import React from 'react';
 import { Building, Clock, CheckCircle, AlertCircle, TrendingUp, Star } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
+import { Processo } from '@/app/types';
 
 export default function DashboardStats() {
-  const { processos } = useSistema();
+  const { processos: processosRaw } = useSistema();
+  const processos = processosRaw as Processo[];
 
-  const emAndamento = processos.filter((p) => p.status === 'Em Andamento').length;
-  const finalizados = processos.filter((p) => p.status === 'Finalizado').length;
+  const emAndamento = processos.filter((p) => p.status === 'em_andamento').length;
+  const finalizados = processos.filter((p) => p.status === 'finalizado').length;
   const taxaSucesso = processos.length > 0 ? Math.round((finalizados / processos.length) * 100) : 0;
 
   return (
@@ -19,10 +21,6 @@ export default function DashboardStats() {
           <div>
             <p className="text-sm text-gray-600 font-medium">Total de Processos</p>
             <p className="text-3xl font-bold text-gray-900 mt-1">{processos.length}</p>
-            <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
-              <TrendingUp size={12} />
-              +12% este mês
-            </p>
           </div>
           <div className="bg-gradient-to-br from-cyan-500 to-blue-600 p-4 rounded-xl">
             <Building className="text-white" size={24} />
@@ -64,10 +62,6 @@ export default function DashboardStats() {
           <div>
             <p className="text-sm text-gray-600 font-medium">Taxa de Sucesso</p>
             <p className="text-3xl font-bold text-cyan-600 mt-1">{taxaSucesso}%</p>
-            <p className="text-xs text-cyan-600 mt-2 flex items-center gap-1">
-              <Star size={12} />
-              Excelente desempenho
-            </p>
           </div>
           <div className="bg-gradient-to-br from-cyan-500 to-blue-600 p-4 rounded-xl">
             <AlertCircle className="text-white" size={24} />

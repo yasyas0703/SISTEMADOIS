@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, Plus, Trash2, Edit, FileText, Users, Calculator, FileCheck, Briefcase } from 'lucide-react';
+import { useSistema } from '@/app/context/SistemaContext';
 
 interface ModalCriarDepartamentoProps {
   onClose: () => void;
@@ -14,6 +15,7 @@ export default function ModalCriarDepartamento({
   onSave,
   departamento,
 }: ModalCriarDepartamentoProps) {
+  const { mostrarAlerta } = useSistema();
   const [formData, setFormData] = useState({
     nome: departamento?.nome || '',
     responsavel: departamento?.responsavel || '',
@@ -44,12 +46,12 @@ export default function ModalCriarDepartamento({
     e.preventDefault();
     
     if (!formData.nome.trim()) {
-      alert('Digite o nome do departamento!');
+      void mostrarAlerta('Atenção', 'Digite o nome do departamento!', 'aviso');
       return;
     }
 
     if (!formData.responsavel.trim()) {
-      alert('Digite o nome do responsável!');
+      void mostrarAlerta('Atenção', 'Digite o nome do responsável!', 'aviso');
       return;
     }
 
@@ -61,9 +63,13 @@ export default function ModalCriarDepartamento({
       nome: formData.nome,
       responsavel: formData.responsavel,
       descricao: formData.descricao,
-      cor: corSelecionada,
-      icone: iconeSelecionado,
+      cor: formData.cor,
+      corSolida: corSelecionada?.solida,
+      icone: iconeSelecionado?.componente,
+      criadoEm: departamento?.criadoEm || new Date(),
     });
+
+    onClose();
   };
 
   const IconeAtual = iconesDisponiveis.find(i => i.nome === formData.icone)?.componente || FileText;

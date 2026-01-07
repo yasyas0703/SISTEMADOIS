@@ -1,22 +1,25 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, ArrowRight, Edit, Plus } from 'lucide-react';
+import { X, ArrowRight, Edit, Plus, ClipboardList, Mail, Phone } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
+import { Empresa } from '@/app/types';
+import ModalBase from './ModalBase';
+// (Telefone/email inputs ainda não presentes aqui; removendo imports não utilizados)
 
 interface ModalNovaEmpresaProps {
   onClose: () => void;
 }
 
 export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
-  const { departamentos, usuarioLogado } = useSistema();
+  const { departamentos, usuarioLogado, criarProcesso, empresas, criarTemplate, mostrarAlerta } = useSistema();
   
   const [nomeEmpresa, setNomeEmpresa] = useState("");
   const [cliente, setCliente] = useState("");
   const [email, setEmail] = useState("");
   const [telefone, setTelefone] = useState("");
   const [nomeServico, setNomeServico] = useState("");
-  const [empresaSelecionada, setEmpresaSelecionada] = useState<any>(null);
+  const [empresaSelecionada, setEmpresaSelecionada] = useState<Empresa | null>(null);
   
   const [questionariosPorDept, setQuestionariosPorDept] = useState<any>({});
   const [departamentoSelecionado, setDepartamentoSelecionado] = useState<number | null>(null);
@@ -73,7 +76,7 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
 
   const salvarPergunta = () => {
     if (!editandoPergunta.label.trim()) {
-      alert("Digite o texto da pergunta!");
+      void mostrarAlerta('Atenção', 'Digite o texto da pergunta!', 'aviso');
       return;
     }
 
@@ -129,37 +132,56 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
     e.preventDefault();
 
     if (!empresaSelecionada) {
-      alert("Selecione uma empresa cadastrada!");
+      void mostrarAlerta('Atenção', 'Selecione uma empresa.', 'aviso');
       return;
     }
 
     if (!nomeServico.trim()) {
-      alert("Digite o nome do serviço!");
+      void mostrarAlerta('Atenção', 'Digite o nome do serviço!', 'aviso');
       return;
     }
 
     if (fluxoDepartamentos.length === 0) {
-      alert("Adicione pelo menos um departamento ao fluxo!");
+      void mostrarAlerta('Atenção', 'Adicione pelo menos um departamento ao fluxo!', 'aviso');
       return;
     }
 
-    console.log("Solicitação criada:", {
+    criarProcesso({
+      nome: nomeServico,
       nomeServico,
-      empresa: empresaSelecionada,
+      nomeEmpresa: nomeEmpresa || empresaSelecionada?.razao_social || empresaSelecionada?.apelido || 'Nova Empresa',
+      empresa: nomeEmpresa || empresaSelecionada?.razao_social || empresaSelecionada?.apelido || 'Nova Empresa',
+      empresaId: empresaSelecionada.id,
+      cliente,
+      email,
+      telefone,
       fluxoDepartamentos,
-      questionarios: questionariosPorDept
+      departamentoAtual: fluxoDepartamentos[0],
+      departamentoAtualIndex: 0,
+      questionariosPorDepartamento: questionariosPorDept,
+      criadoPor: usuarioLogado?.nome,
+      descricao: `Solicitação criada: ${nomeServico}`,
     });
+
+    if (salvarComoTemplateChecked && usuarioLogado?.role === 'admin') {
+      criarTemplate({
+        nome: nomeServico,
+        descricao: `Template criado a partir da solicitação: ${nomeServico}`,
+        fluxoDepartamentos,
+        questionariosPorDepartamento: questionariosPorDept,
+      });
+    }
 
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+    <ModalBase isOpen onClose={onClose} labelledBy="nova-solic-title" dialogClassName="w-full max-w-6xl bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none max-h-[90vh] overflow-y-auto" zIndex={1050}>
+      <div className="rounded-2xl">
         {/* Header */}
         <div className="bg-gradient-to-r from-cyan-500 to-blue-600 p-6 rounded-t-2xl sticky top-0 z-10">
           <div className="flex justify-between items-center">
-            <h3 className="text-xl font-bold text-white">Nova Solicitação</h3>
+            <h3 id="nova-solic-title" className="text-xl font-bold text-white">Nova Solicitação</h3>
             <button
               onClick={onClose}
               className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg"
@@ -169,9 +191,9 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6" onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); (e.currentTarget as HTMLFormElement).requestSubmit(); } }}>
           {/* Seção 1: Informações da Solicitação */}
-          <div className="bg-cyan-50 rounded-xl p-4 border border-cyan-200">
+          <div className="bg-cyan-50 dark:bg-[#0f2b34] rounded-xl p-4 border border-cyan-200 dark:border-[#155e75]">
             <h4 className="font-semibold text-cyan-800 mb-4">Informações da Solicitação</h4>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -182,18 +204,31 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
                 <select
                   value={empresaSelecionada?.id || ""}
                   onChange={(e) => {
-                    if (e.target.value) {
-                      const empresa = departamentos[0]; // Demo
-                      setEmpresaSelecionada({ id: 1, nome: "695 - A. RIBEIRO EQUIPAMENTOS LTDA" });
-                      setNomeEmpresa("A. RIBEIRO EQUIPAMENTOS LTDA");
-                      setCliente("A. RIBEIRO EQUIPAMENTOS LTDA");
+                    const empresaId = e.target.value;
+                    if (!empresaId) {
+                      setEmpresaSelecionada(null);
+                      return;
+                    }
+
+                    const emp = (empresas || []).find((x) => x.id === Number(empresaId));
+                    if (emp) {
+                      setEmpresaSelecionada(emp);
+                      setNomeEmpresa(emp.razao_social || emp.apelido || 'Empresa');
+                      // Não preencher automaticamente o responsável com o nome da empresa
+                      // (o usuário escolhe o responsável e o nome do serviço)
+                      setEmail(emp.email || '');
+                      setTelefone(emp.telefone || '');
                     }
                   }}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-cyan-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                   required
                 >
                   <option value="">Selecione uma empresa</option>
-                  <option value="1">695 - A. RIBEIRO EQUIPAMENTOS LTDA</option>
+                  {(empresas || []).map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.codigo} - {emp.razao_social}{emp.cadastrada ? '' : ' (NOVA)'}
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -205,7 +240,7 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
                   type="text"
                   value={cliente}
                   onChange={(e) => setCliente(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-cyan-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                   placeholder="Nome do responsável"
                 />
               </div>
@@ -219,7 +254,7 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
                 type="text"
                 value={nomeServico}
                 onChange={(e) => setNomeServico(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-cyan-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                 placeholder="Ex: Abertura de Empresa, Alteração Contratual..."
                 required
               />
@@ -253,7 +288,7 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
                           : 'border-2 border-gray-300 hover:border-purple-500 text-gray-700'
                       }`}
                     >
-                      📋 {dept.nome}
+                      <ClipboardList size={16} /> {dept.nome}
                       {jaAdicionado && (
                         <span className="bg-white bg-opacity-20 px-2 py-0.5 rounded text-xs">
                           {questionariosPorDept[dept.id]?.length || 0} perguntas
@@ -287,7 +322,7 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
                               : 'bg-gray-100 text-gray-700'
                           }`}
                         >
-                          📋 {dept.nome}
+                          <ClipboardList size={16} /> {dept.nome}
                         </button>
                         {index < fluxoDepartamentos.length - 1 && (
                           <ArrowRight size={16} className="text-gray-400" />
@@ -481,10 +516,10 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
 
                                   <div className="bg-white p-2 rounded border border-blue-300">
                                     <p className="text-xs text-gray-600">
-                                      📌 Esta pergunta só aparecerá se "{
+                                      📌 Esta pergunta só aparecerá se &quot;{
                                         (questionariosPorDept[departamentoSelecionado] || [])
                                           .find((p: any) => p.id === editandoPergunta.condicao.perguntaId)?.label
-                                      }" {editandoPergunta.condicao.operador} "{editandoPergunta.condicao.valor}"
+                                      }&quot; {editandoPergunta.condicao.operador} &quot;{editandoPergunta.condicao.valor}&quot;
                                     </p>
                                   </div>
                                 </div>
@@ -645,6 +680,6 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
           </div>
         </form>
       </div>
-    </div>
+    </ModalBase>
   );
 }

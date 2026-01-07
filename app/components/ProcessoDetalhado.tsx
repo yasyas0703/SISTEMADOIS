@@ -1,0 +1,208 @@
+'use client';
+
+import React, { useState } from 'react';
+import {
+  X, MessageSquare, FileText, Eye, CheckCircle, Clock, Calendar,
+  User, AlertCircle, Tag, ArrowRight, Trash2, MoreVertical,
+  Upload, Download, Edit, Flag, Zap, Activity
+} from 'lucide-react';
+import { Processo } from '@/app/types';
+
+interface ProcessoDetalhadoProps {
+  processo: Processo;
+  departamentos?: any[];
+  onClose: () => void;
+  onVerCompleto?: () => void;
+  onComentarios?: () => void;
+  onQuestionario?: () => void;
+  onDocumentos?: () => void;
+  onAvancar?: () => void;
+  onFinalizar?: () => void;
+}
+
+export default function ProcessoDetalhado({
+  processo,
+  departamentos,
+  onClose,
+  onVerCompleto,
+  onComentarios,
+  onQuestionario,
+  onDocumentos,
+  onAvancar,
+  onFinalizar,
+}: ProcessoDetalhadoProps) {
+  const [activeTab, setActiveTab] = useState('detalhes');
+
+  const formatarData = (data: Date | string) => {
+    if (!data) return 'N/A';
+    return new Date(data).toLocaleDateString('pt-BR');
+  };
+
+  const statusCor = processo.status === 'finalizado' 
+    ? 'bg-green-100 text-green-800' 
+    : processo.status === 'pausado' 
+    ? 'bg-red-100 text-red-800'
+    : 'bg-blue-100 text-blue-800';
+
+  const prioridadeCor = processo.prioridade === 'alta'
+    ? 'bg-red-100 text-red-800'
+    : processo.prioridade === 'media'
+    ? 'bg-amber-100 text-amber-800'
+    : 'bg-green-100 text-green-800';
+
+  return (
+    <div className="bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl overflow-hidden max-w-4xl w-full">
+      {/* Cabeçalho */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-8 text-white relative">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition"
+        >
+          <X size={24} />
+        </button>
+
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-2xl font-bold mb-2">{processo.nome}</h2>
+            <p className="text-blue-100 flex items-center gap-2">
+              <User size={16} />
+              {processo.empresa}
+            </p>
+          </div>
+        </div>
+
+        {/* Tags Status */}
+        <div className="flex items-center gap-3 flex-wrap mt-6">
+          <span className={`px-4 py-2 rounded-full font-semibold text-sm ${statusCor} dark:bg-[var(--muted)] dark:text-[var(--fg)]`}>
+            {processo.status === 'finalizado' ? '✓' : '⏱'} {processo.status}
+          </span>
+          <span className={`px-4 py-2 rounded-full font-semibold text-sm ${prioridadeCor} dark:bg-[var(--muted)] dark:text-[var(--fg)]`}>
+            {processo.prioridade === 'alta' && '🔴'}
+            {processo.prioridade === 'media' && '🟡'}
+            {processo.prioridade === 'baixa' && '🟢'}
+            {processo.prioridade?.toUpperCase()}
+          </span>
+          {processo.tags?.map((tagId) => (
+            <span key={tagId} className="px-4 py-2 rounded-full font-semibold text-sm bg-purple-200 text-purple-800 dark:bg-[var(--muted)] dark:text-[var(--fg)]">
+              Revisão
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Conteúdo */}
+      <div className="p-8 space-y-8">
+        {/* Informações Principais */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="border-l-4 border-blue-500 pl-4">
+            <p className="text-sm text-gray-600 mb-1">Cliente</p>
+            <p className="font-bold text-gray-800">{processo.empresa}</p>
+          </div>
+          <div className="border-l-4 border-green-500 pl-4">
+            <p className="text-sm text-gray-600 mb-1">Inicio</p>
+            <p className="font-bold text-gray-800">{formatarData(processo.criadoEm)}</p>
+          </div>
+          <div className="border-l-4 border-orange-500 pl-4">
+            <p className="text-sm text-gray-600 mb-1">Prazo</p>
+            <p className="font-bold text-gray-800">{formatarData(processo.dataEntrega)}</p>
+          </div>
+        </div>
+
+        {/* Botões de Ação */}
+        <div className="flex items-center gap-3 flex-wrap bg-gray-50 dark:bg-[var(--muted)] p-6 rounded-xl">
+          <button
+            onClick={onVerCompleto}
+            className="px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold transition flex items-center gap-2"
+          >
+            <Eye size={18} />
+            Ver Completo
+          </button>
+          <button
+            onClick={onComentarios}
+            className="px-6 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-semibold transition flex items-center gap-2"
+          >
+            <MessageSquare size={18} />
+            Comentários (1)
+          </button>
+          <button
+            onClick={onQuestionario}
+            className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition flex items-center gap-2"
+          >
+            <FileText size={18} />
+            Ver Questionário
+          </button>
+          <button
+            onClick={onDocumentos}
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition flex items-center gap-2"
+          >
+            <Upload size={18} />
+            Documentos (1)
+          </button>
+          <button className="px-4 py-2 text-gray-600 hover:text-gray-800">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Últimas Atividades */}
+        <div className="bg-gray-50 dark:bg-[var(--muted)] p-6 rounded-xl">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity size={20} className="text-orange-500" />
+            <h3 className="font-bold text-gray-800 dark:text-[var(--fg)]">Últimas Atividades</h3>
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <ArrowRight size={18} className="text-blue-500 mt-1 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-gray-800 dark:text-[var(--fg)]">Avançou de Cadastro para Fiscal (2/3)</p>
+                <p className="text-sm text-gray-500">Admin • 09/12/2025, 08:33:06</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <ArrowRight size={18} className="text-blue-500 mt-1 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-gray-800 dark:text-[var(--fg)]">Avançou de Fiscal para RH (3/3)</p>
+                <p className="text-sm text-gray-500">Admin • 09/12/2025, 08:33:19</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <CheckCircle size={18} className="text-green-500 mt-1 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-gray-800 dark:text-[var(--fg)]">Processo finalizado com sucesso</p>
+                <p className="text-sm text-gray-500">Admin • 09/12/2025, 08:34:51</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <span className="px-3 py-1 bg-purple-200 text-purple-800 dark:bg-[var(--muted)] dark:text-[var(--fg)] text-xs font-semibold rounded-full">
+              Revisão
+            </span>
+            <span className="px-3 py-1 bg-orange-200 text-orange-800 dark:bg-[var(--muted)] dark:text-[var(--fg)] text-xs font-semibold rounded-full">
+              Documentação Pendente
+            </span>
+            <span className="px-3 py-1 bg-gray-400 text-gray-800 dark:bg-[var(--muted)] dark:text-[var(--fg)] text-xs font-semibold rounded-full">
+              sdsdsdsd
+            </span>
+          </div>
+        </div>
+
+        {/* Botões de Ação Finais */}
+        {processo.status !== 'finalizado' && (
+          <div className="flex gap-3">
+            <button
+              onClick={onAvancar}
+              className="flex-1 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold transition"
+            >
+              Avançar para Próximo
+            </button>
+            <button
+              onClick={onFinalizar}
+              className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition"
+            >
+              Finalizar
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

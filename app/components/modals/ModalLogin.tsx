@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { LogIn } from 'lucide-react';
+import ModalBase from './ModalBase';
 
 interface ModalLoginProps {
   onLogin: (usuario: any) => void;
@@ -19,13 +20,11 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
     e.preventDefault();
     setErro('');
 
-    // Validação simples - em uma app real, seria com backend
     if (!formData.nome || !formData.senha) {
       setErro('Preencha todos os campos');
       return;
     }
 
-    // Usuário padrão para demo
     if (formData.nome === 'admin' && formData.senha === 'admin123') {
       const usuario = {
         id: 1,
@@ -50,14 +49,20 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-100 flex items-center justify-center z-50 p-4">
-      <div className="w-full max-w-md">
+    <ModalBase
+      isOpen
+      onClose={() => {}}
+      labelledBy="login-title"
+      describedBy="login-desc"
+      initialFocusSelector="#login-user"
+      dialogClassName="w-full max-w-md bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none"
+    >
         {/* Card Principal */}
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="bg-white dark:bg-[var(--card)] rounded-2xl overflow-hidden">
           {/* Header com Gradient */}
           <div className="bg-gradient-to-r from-cyan-500 to-blue-600 p-8 text-white">
             <div className="flex items-center justify-center mb-4">
-              <div className="w-16 h-16 rounded-xl bg-white bg-opacity-20 flex items-center justify-center">
+              <div className="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center">
                 <img
                   src="/triar.png"
                   alt="Logo"
@@ -65,42 +70,44 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
                 />
               </div>
             </div>
-            <h1 className="text-3xl font-bold text-center">Sistema de Abertura</h1>
-            <p className="text-center text-white text-opacity-90 mt-2">Gerenciamento de Processos</p>
+            <h1 id="login-title" className="text-3xl font-bold text-center">Sistema de Abertura</h1>
+            <p id="login-desc" className="text-center text-white/90 mt-2">Gerenciamento de Processos</p>
           </div>
 
           {/* Form */}
           <div className="p-8">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
                   Usuário
                 </label>
                 <input
                   type="text"
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 transition-all duration-200 text-gray-900"
+                  className="w-full px-4 py-3 border-2 border-gray-200 dark:border-[var(--border)] rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 transition-all duration-200 text-gray-900 dark:text-[var(--fg)] bg-white dark:bg-[var(--card)]"
                   placeholder="Seu usuário"
-                  autoFocus
+                  id="login-user"
+                  aria-required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
                   Senha
                 </label>
                 <input
                   type="password"
                   value={formData.senha}
                   onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 transition-all duration-200 text-gray-900"
+                  className="w-full px-4 py-3 border-2 border-gray-200 dark:border-[var(--border)] rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 transition-all duration-200 text-gray-900 dark:text-[var(--fg)] bg-white dark:bg-[var(--card)]"
                   placeholder="Sua senha"
+                  aria-required
                 />
               </div>
 
               {erro && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm" role="alert">
                   {erro}
                 </div>
               )}
@@ -122,11 +129,10 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-gray-200 text-center text-sm text-gray-600">
-            Versão 1.0 - Sistema de Abertura © 2024
+          <div className="p-4 border-t border-gray-200 dark:border-[var(--border)] text-center text-sm text-gray-600 dark:text-gray-300">
+            Versão 1.0 - Sistema de Abertura © 2026
           </div>
         </div>
-      </div>
-    </div>
+    </ModalBase>
   );
 }

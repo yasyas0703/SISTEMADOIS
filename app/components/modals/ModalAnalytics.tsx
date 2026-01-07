@@ -84,9 +84,9 @@ export default function ModalAnalytics({ onClose }: ModalAnalyticsProps) {
     dados,
     titulo,
     cor = "from-cyan-500 to-blue-600",
-  }) => {
+  }: any) => {
     const maxValor = Math.max(
-      ...Object.values(dados).map((val) =>
+      ...Object.values(dados).map((val: any) =>
         typeof val === "number" ? val : val.tempoMedio || 0
       )
     );
@@ -95,7 +95,7 @@ export default function ModalAnalytics({ onClose }: ModalAnalyticsProps) {
       <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-200">
         <h4 className="font-bold text-gray-800 mb-4">{titulo}</h4>
         <div className="space-y-3">
-          {Object.entries(dados).map(([nome, valor]) => {
+          {Object.entries(dados).map(([nome, valor]: any) => {
             const valorNumerico =
               typeof valor === "number" ? valor : valor.tempoMedio || 0;
             const porcentagem =
@@ -271,7 +271,7 @@ export default function ModalAnalytics({ onClose }: ModalAnalyticsProps) {
             <div className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                 {Object.entries(analytics.performanceDepartamentos || {}).map(
-                  ([deptId, performance]) => (
+                  ([deptId, performance]: any) => (
                     <div
                       key={deptId}
                       className="bg-white rounded-xl p-6 shadow-lg border border-gray-200 hover:shadow-xl transition-all"
@@ -331,7 +331,7 @@ export default function ModalAnalytics({ onClose }: ModalAnalyticsProps) {
                 </h4>
                 <div className="space-y-4">
                   {Object.entries(analytics.previsaoConclusao || {}).map(
-                    ([processoId, previsao]) => (
+                    ([processoId, previsao]: any) => (
                       <div
                         key={processoId}
                         className="flex items-center justify-between p-4 bg-purple-50 rounded-lg border border-purple-200"

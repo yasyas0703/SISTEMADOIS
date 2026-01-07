@@ -2,18 +2,22 @@
 
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useSistema } from '@/app/context/SistemaContext';
+import { Empresa } from '@/app/types';
+import ModalBase from './ModalBase';
+import { cepSchema, cpfSchema, cnpjSchema } from '@/app/utils/validation';
 
 interface ModalCadastrarEmpresaProps {
   onClose: () => void;
-  empresa?: any;
+  empresa?: Empresa;
 }
 
 export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastrarEmpresaProps) {
-  const [empresaCadastrada, setEmpresaCadastrada] = useState(
-    empresa ? empresa.cadastrada !== false : true
-  );
+  const { criarEmpresa, atualizarEmpresa, mostrarAlerta } = useSistema();
 
-  const [formData, setFormData] = useState({
+  const [empresaCadastrada, setEmpresaCadastrada] = useState(empresa ? empresa.cadastrada !== false : false);
+
+  const [formData, setFormData] = useState<Partial<Empresa>>({
     cnpj: '',
     codigo: '',
     razao_social: '',
@@ -30,18 +34,22 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
     logradouro: '',
     numero: '',
     cep: '',
-    cadastrada: empresaCadastrada
+    cadastrada: empresaCadastrada,
   });
+  const [erros, setErros] = useState<Record<string, string>>({});
 
-  const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({
+  const handleChange = (field: keyof Empresa, value: any) => {
+    setFormData((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
   };
 
   useEffect(() => {
-    handleChange('cadastrada', empresaCadastrada ? 'true' : 'false');
+    setFormData((prev) => ({
+      ...prev,
+      cadastrada: empresaCadastrada,
+    }));
   }, [empresaCadastrada]);
 
   useEffect(() => {
@@ -83,33 +91,57 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validação básica com zod (CPF/CNPJ/CEP) e obrigatórios
+    const novosErros: Record<string, string> = {};
+    if (!formData.codigo) novosErros.codigo = 'Código é obrigatório';
+    if (empresaCadastrada && !formData.razao_social) novosErros.razao_social = 'Razão Social é obrigatória';
+
+    const digits = String(formData.cnpj || '').replace(/\D/g, '');
+    if (digits.length === 11) {
+      const parsed = cpfSchema.safeParse(String(formData.cnpj || ''));
+      if (!parsed.success) novosErros.cnpj = 'CPF inválido';
+    } else if (digits.length === 14) {
+      const parsed = cnpjSchema.safeParse(String(formData.cnpj || ''));
+      if (!parsed.success) novosErros.cnpj = 'CNPJ inválido';
+    }
+    if (formData.cep) {
+      const parsedCep = cepSchema.safeParse(String(formData.cep || ''));
+      if (!parsedCep.success) novosErros.cep = 'CEP inválido';
+    }
+
+    setErros(novosErros);
+    if (Object.keys(novosErros).length > 0) return;
+
     if (!formData.codigo || !formData.razao_social) {
-      alert("Código e Razão Social são obrigatórios");
+      void mostrarAlerta('Campos obrigatórios', 'Código e Razão Social são obrigatórios.', 'aviso');
       return;
     }
 
-    if (empresaCadastrada && !formData.cnpj) {
-      alert("Empresas cadastradas precisam ter CNPJ");
-      return;
-    }
+    const cnpjDigits = String(formData.cnpj || '').replace(/\D/g, '');
+    const cadastrada = cnpjDigits.length > 0;
 
-    const dadosParaSalvar = {
+    const dadosParaSalvar: Partial<Empresa> = {
       ...formData,
-      cadastrada: empresaCadastrada,
-      cnpj: empresaCadastrada ? formData.cnpj : null
+      cnpj: String(formData.cnpj || ''),
+      cadastrada,
     };
 
-    console.log('Salvando empresa:', dadosParaSalvar);
+    if (empresa?.id) {
+      atualizarEmpresa(empresa.id, dadosParaSalvar);
+    } else {
+      criarEmpresa(dadosParaSalvar);
+    }
+
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+    <ModalBase isOpen onClose={onClose} labelledBy="empresa-title" dialogClassName="w-full max-w-4xl bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none max-h-[90vh] overflow-y-auto" zIndex={1070}>
+      <div className="rounded-2xl">
         {/* Header */}
         <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-t-2xl sticky top-0 z-10">
           <div className="flex justify-between items-center">
-            <h3 className="text-xl font-bold text-white">
+            <h3 id="empresa-title" className="text-xl font-bold text-white">
               {empresa ? "Editar Empresa" : "Cadastrar Nova Empresa"}
             </h3>
             <button onClick={onClose} className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg">
@@ -118,12 +150,12 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6" onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); (e.currentTarget as HTMLFormElement).requestSubmit(); } }}>
           {/* Tipo de Empresa */}
-          <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+          <div className="bg-blue-50 dark:bg-[#102236] rounded-xl p-4 border border-blue-200 dark:border-[#1d4ed8]">
             <h4 className="font-semibold text-blue-800 mb-4">Tipo de Empresa</h4>
             <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer bg-white p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 transition-all flex-1">
+              <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-[var(--card)] p-4 rounded-lg border-2 border-gray-200 dark:border-[var(--border)] hover:border-blue-500 transition-all flex-1">
                 <input
                   type="radio"
                   name="tipoCadastro"
@@ -132,12 +164,12 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                   className="w-5 h-5 text-blue-600"
                 />
                 <div>
-                  <div className="font-semibold text-gray-900">Empresa Cadastrada</div>
-                  <div className="text-xs text-gray-600">Já possui CNPJ e Razão Social</div>
+                  <div className="font-semibold text-gray-900 dark:text-gray-100">Empresa Cadastrada</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-300">Já possui CNPJ e Razão Social</div>
                 </div>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer bg-white p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 transition-all flex-1">
+              <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-[var(--card)] p-4 rounded-lg border-2 border-gray-200 dark:border-[var(--border)] hover:border-blue-500 transition-all flex-1">
                 <input
                   type="radio"
                   name="tipoCadastro"
@@ -146,15 +178,15 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                   className="w-5 h-5 text-blue-600"
                 />
                 <div>
-                  <div className="font-semibold text-gray-900">Empresa Nova</div>
-                  <div className="text-xs text-gray-600">Ainda não possui CNPJ</div>
+                  <div className="font-semibold text-gray-900 dark:text-gray-100">Empresa Nova</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-300">Ainda não possui CNPJ</div>
                 </div>
               </label>
             </div>
           </div>
 
           {/* Dados Principais */}
-          <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+          <div className="bg-green-50 dark:bg-[#10291f] rounded-xl p-4 border border-green-200 dark:border-[#15803d]">
             <h4 className="font-semibold text-green-800 mb-4">
               Dados Principais {empresaCadastrada && '*'}
             </h4>
@@ -167,10 +199,13 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                 </label>
                 <input
                   type="text"
-                  value={formData.cnpj}
+                  value={String(formData.cnpj || '')}
                   onChange={(e) => {
                     const valorFormatado = formatarCPFCNPJ(e.target.value);
                     handleChange('cnpj', valorFormatado);
+
+                    const digits = valorFormatado.replace(/\D/g, '');
+                    setEmpresaCadastrada(digits.length > 0);
                   }}
                   onKeyDown={(e) => {
                     if (
@@ -180,11 +215,12 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                     ) return;
                     e.preventDefault();
                   }}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
+                  className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 ${erros.cnpj ? 'border-red-500' : 'border-gray-300 dark:border-[var(--border)]'} bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]`}
                   placeholder={empresaCadastrada ? "000.000.000-00 ou 00.000.000/0000-00" : "Opcional"}
-                  required={empresaCadastrada}
+                  required={false}
                   maxLength={18}
                 />
+                {erros.cnpj && <p className="mt-1 text-sm text-red-500">{erros.cnpj}</p>}
               </div>
 
               {/* Código */}
@@ -194,12 +230,13 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                 </label>
                 <input
                   type="text"
-                  value={formData.codigo}
+                  value={String(formData.codigo || '')}
                   onChange={(e) => handleChange('codigo', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
+                  className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 ${erros.codigo ? 'border-red-500' : 'border-gray-300 dark:border-[var(--border)]'} bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]`}
                   placeholder="001"
                   required
                 />
+                {erros.codigo && <p className="mt-1 text-sm text-red-500">{erros.codigo}</p>}
               </div>
             </div>
 
@@ -211,12 +248,13 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                 </label>
                 <input
                   type="text"
-                  value={formData.razao_social}
+                  value={String(formData.razao_social || '')}
                   onChange={(e) => handleChange('razao_social', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
+                  className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 ${erros.razao_social ? 'border-red-500' : 'border-gray-300 dark:border-[var(--border)]'} bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]`}
                   placeholder={empresaCadastrada ? "Nome oficial da empresa" : "Nome provisório (opcional)"}
                   required={empresaCadastrada}
                 />
+                {erros.razao_social && <p className="mt-1 text-sm text-red-500">{erros.razao_social}</p>}
               </div>
 
               <div>
@@ -225,9 +263,9 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                 </label>
                 <input
                   type="text"
-                  value={formData.apelido}
+                  value={String(formData.apelido || '')}
                   onChange={(e) => handleChange('apelido', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-green-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                   placeholder="Apelido"
                 />
               </div>
@@ -244,7 +282,7 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
           </div>
 
           {/* Inscrições e Regimes */}
-          <div className="bg-blue-50 rounded-xl p-4 border border-blue-200 mt-6">
+          <div className="bg-blue-50 dark:bg-[#0f2036] rounded-xl p-4 border border-blue-200 dark:border-[#1e3a8a] mt-6">
             <h4 className="font-semibold text-blue-800 mb-4">Inscrições e Regimes</h4>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -256,7 +294,7 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                   type="text"
                   value={formData.inscricao_estadual}
                   onChange={(e) => handleChange('inscricao_estadual', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                 />
               </div>
 
@@ -268,7 +306,7 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                   type="text"
                   value={formData.inscricao_municipal}
                   onChange={(e) => handleChange('inscricao_municipal', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                 />
               </div>
 
@@ -279,7 +317,7 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                 <select
                   value={formData.regime_federal}
                   onChange={(e) => handleChange('regime_federal', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                 >
                   <option value="">Selecione...</option>
                   <option value="Simples Nacional">Simples Nacional</option>
@@ -317,7 +355,7 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
           </div>
 
           {/* Endereço */}
-          <div className="bg-purple-50 rounded-xl p-4 border border-purple-200 mt-6">
+          <div className="bg-purple-50 dark:bg-[#1f1630] rounded-xl p-4 border border-purple-200 dark:border-[#6d28d9] mt-6">
             <h4 className="font-semibold text-purple-800 mb-4">Endereço</h4>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -341,10 +379,11 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                     ) return;
                     e.preventDefault();
                   }}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                  className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-purple-500 ${erros.cep ? 'border-red-500' : 'border-gray-300 dark:border-[var(--border)]'} bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]`}
                   placeholder="00000-000"
                   maxLength={9}
                 />
+                {erros.cep && <p className="mt-1 text-sm text-red-500">{erros.cep}</p>}
               </div>
 
               <div>
@@ -354,7 +393,7 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                 <select
                   value={formData.estado}
                   onChange={(e) => handleChange('estado', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                 >
                   <option value="">Selecione...</option>
                   <option value="AC">AC</option>
@@ -395,7 +434,7 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                   type="text"
                   value={formData.cidade}
                   onChange={(e) => handleChange('cidade', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                 />
               </div>
             </div>
@@ -409,7 +448,7 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                   type="text"
                   value={formData.bairro}
                   onChange={(e) => handleChange('bairro', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                 />
               </div>
 
@@ -421,7 +460,7 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                   type="text"
                   value={formData.logradouro}
                   onChange={(e) => handleChange('logradouro', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                   placeholder="Rua, Avenida..."
                 />
               </div>
@@ -446,17 +485,17 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
                   ) return;
                   e.preventDefault();
                 }}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
               />
             </div>
           </div>
 
           {/* Botões */}
-          <div className="flex gap-4 pt-6 border-t border-gray-200">
+          <div className="flex gap-4 pt-6 border-t border-gray-200 dark:border-[var(--border)]">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-100"
+              className="flex-1 px-6 py-3 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-[var(--border)] rounded-xl hover:bg-gray-100 dark:hover:bg-[var(--muted)]"
             >
               Cancelar
             </button>
@@ -469,6 +508,6 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
           </div>
         </form>
       </div>
-    </div>
+    </ModalBase>
   );
 }

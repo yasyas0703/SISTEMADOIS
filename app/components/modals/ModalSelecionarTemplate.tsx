@@ -1,15 +1,25 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, FileText, Info, MoreVertical, Trash2 } from 'lucide-react';
+import { X, FileText, Info, MoreVertical, Trash2, Mail, Phone, ClipboardList } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
+import { Template } from '@/app/types';
 
 interface ModalSelecionarTemplateProps {
   onClose: () => void;
 }
 
 export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemplateProps) {
-  const { departamentos, usuarioLogado } = useSistema();
+  const {
+    usuarioLogado,
+    criarProcesso,
+    empresas,
+    departamentos,
+    templates,
+    excluirTemplate: excluirTemplateContext,
+    mostrarAlerta,
+    mostrarConfirmacao,
+  } = useSistema();
   
   const [empresaSelecionada, setEmpresaSelecionada] = useState<any>(null);
   const [responsavel, setResponsavel] = useState("");
@@ -18,51 +28,63 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
   const [templateComTooltipNome, setTemplateComTooltipNome] = useState<number | null>(null);
   const [showMenuTemplate, setShowMenuTemplate] = useState<number | null>(null);
 
-  const templatesDisponiveis = [
-    {
-      id: 1,
-      nome: "a",
-      descricao: "Template para a",
-      fluxo_departamentos: [1, 2],
-      questionarios_por_departamento: {
-        1: [
-          { id: 1, label: "Pergunta 1", tipo: "text" },
-          { id: 2, label: "Pergunta 2", tipo: "text" }
-        ],
-        2: [
-          { id: 3, label: "Pergunta 3", tipo: "select" }
-        ]
-      },
-      criado_em: new Date("2026-01-06")
-    }
-  ];
+  const templatesDisponiveis: Template[] = templates || [];
 
-  const empresas = [
-    {
-      id: 1,
-      codigo: "695",
-      razao_social: "A. RIBEIRO EQUIPAMENTOS LTDA",
-      cnpj: "12.345.678/0001-90",
-      email: "contato@ribeiro.com.br",
-      telefone: "(11) 3000-0000"
-    }
-  ];
+  const empresasDisponiveis = empresas || [];
 
   const handleCriar = () => {
     if (!empresaSelecionada) {
-      alert("Selecione uma empresa");
+      void mostrarAlerta('Atenção', 'Selecione uma empresa.', 'aviso');
       return;
     }
 
     if (!templateSelecionado) {
-      alert("Selecione um template");
+      void mostrarAlerta('Atenção', 'Selecione um template.', 'aviso');
       return;
     }
 
-    console.log("Solicitação criada com template:", {
-      empresa: empresaSelecionada,
-      responsavel,
-      template: templateSelecionado
+    const template = templatesDisponiveis.find((t) => t.id === templateSelecionado);
+    if (!template) {
+      void mostrarAlerta('Erro', 'Template não encontrado.', 'erro');
+      return;
+    }
+
+    const fluxo = (() => {
+      try {
+        const parsed = JSON.parse(template.fluxo_departamentos as any);
+        return Array.isArray(parsed) ? (parsed as number[]) : [];
+      } catch {
+        return [];
+      }
+    })();
+
+    const questionariosPorDept = (() => {
+      try {
+        const parsed = JSON.parse(template.questionarios_por_departamento as any);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch {
+        return {};
+      }
+    })();
+
+    if (fluxo.length === 0) {
+      void mostrarAlerta('Template inválido', 'Fluxo vazio.', 'aviso');
+      return;
+    }
+
+    criarProcesso({
+      nome: template.nome,
+      nomeServico: template.nome,
+      nomeEmpresa: empresaSelecionada?.razao_social || empresaSelecionada?.nome || 'Empresa',
+      empresa: empresaSelecionada?.razao_social || empresaSelecionada?.nome || 'Empresa',
+      empresaId: empresaSelecionada?.id,
+      cliente: responsavel,
+      fluxoDepartamentos: fluxo,
+      departamentoAtual: fluxo[0],
+      departamentoAtualIndex: 0,
+      questionariosPorDepartamento: questionariosPorDept as any,
+      criadoPor: usuarioLogado?.nome,
+      descricao: `Solicitação criada via template: ${template.nome}`,
     });
 
     onClose();
@@ -70,19 +92,47 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
 
   const excluirTemplate = (templateId: number, templateNome: string) => {
     if (!usuarioLogado || usuarioLogado.role !== "admin") {
-      alert("Apenas administradores podem excluir templates");
+      void mostrarAlerta('Permissão negada', 'Apenas administradores podem excluir templates.', 'aviso');
       return;
     }
 
-    if (confirm(`Tem certeza que deseja excluir o template "${templateNome}"?\n\nEsta ação não pode ser desfeita.`)) {
-      console.log("Template excluído:", templateId);
-      setShowMenuTemplate(null);
-    }
+    void (async () => {
+      const ok = await mostrarConfirmacao({
+        titulo: 'Excluir Template',
+        mensagem: `Tem certeza que deseja excluir o template "${templateNome}"?\n\nEsta ação não pode ser desfeita.`,
+        tipo: 'perigo',
+        textoConfirmar: 'Sim, Excluir',
+        textoCancelar: 'Cancelar',
+      });
+
+      if (ok) {
+        excluirTemplateContext(templateId);
+        setShowMenuTemplate(null);
+      }
+    })();
   };
 
   const formatarData = (data: Date | string) => {
     const d = new Date(data);
     return d.toLocaleDateString("pt-BR");
+  };
+
+  const parseFluxo = (template: Template): number[] => {
+    try {
+      const parsed = JSON.parse(template.fluxo_departamentos as any);
+      return Array.isArray(parsed) ? (parsed as number[]) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const parseQuestionarios = (template: Template): Record<number, any[]> => {
+    try {
+      const parsed = JSON.parse(template.questionarios_por_departamento as any);
+      return parsed && typeof parsed === 'object' ? (parsed as any) : {};
+    } catch {
+      return {};
+    }
   };
 
   return (
@@ -91,8 +141,8 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
         <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-t-2xl sticky top-0 z-10">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="text-xl font-bold text-white">
-                📋 Nova Solicitação (Template)
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <ClipboardList size={18} /> Nova Solicitação (Template)
               </h3>
               <p className="text-white opacity-90 text-sm mt-1">
                 Selecione um template e preencha os dados básicos
@@ -127,7 +177,7 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
                   onChange={(e) => {
                     const empresaId = e.target.value;
                     if (empresaId) {
-                      const empresa = empresas.find(emp => emp.id === parseInt(empresaId));
+                      const empresa = empresasDisponiveis.find((emp: any) => emp.id === parseInt(empresaId));
                       setEmpresaSelecionada(empresa);
                     } else {
                       setEmpresaSelecionada(null);
@@ -137,9 +187,9 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
                   required
                 >
                   <option value="">Selecione uma empresa</option>
-                  {empresas.map(emp => (
+                  {empresasDisponiveis.map((emp: any) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.codigo} - {emp.razao_social}
+                      {emp.codigo} - {emp.razao_social}{emp.cadastrada ? '' : ' (NOVA)'}
                     </option>
                   ))}
                 </select>
@@ -168,10 +218,10 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
                     <p className="text-gray-600">👤 Responsável: {responsavel}</p>
                   )}
                   {empresaSelecionada.email && (
-                    <p className="text-gray-600">📧 {empresaSelecionada.email}</p>
+                    <p className="text-gray-600 flex items-center gap-2"><Mail size={14} /> {empresaSelecionada.email}</p>
                   )}
                   {empresaSelecionada.telefone && (
-                    <p className="text-gray-600">📞 {empresaSelecionada.telefone}</p>
+                    <p className="text-gray-600 flex items-center gap-2"><Phone size={14} /> {empresaSelecionada.telefone}</p>
                   )}
                 </div>
               </div>
@@ -264,9 +314,9 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
                               <div className="absolute bottom-full left-0 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg p-3 z-50 shadow-xl">
                                 <div className="font-semibold mb-2">Fluxo do Template:</div>
                                 <div className="space-y-2">
-                                  {template.fluxo_departamentos.map((deptId, index) => {
+                                  {parseFluxo(template).map((deptId, index) => {
                                     const dept = departamentos.find(d => d.id === deptId);
-                                    const perguntas = template.questionarios_por_departamento[deptId] || [];
+                                    const perguntas = parseQuestionarios(template)[deptId] || [];
 
                                     return (
                                       <div key={deptId} className="flex items-start gap-2">
@@ -286,14 +336,14 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
                                   })}
                                 </div>
                                 <div className="border-t border-gray-700 mt-2 pt-2 text-cyan-300">
-                                  Total: {template.fluxo_departamentos.length} departamentos
+                                  Total: {parseFluxo(template).length} departamentos
                                 </div>
                               </div>
                             )}
                           </div>
 
                           <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
-                            <span>{template.fluxo_departamentos.length} departamentos</span>
+                            <span>{parseFluxo(template).length} departamentos</span>
                             <span>•</span>
                             <span>Criado em {formatarData(template.criado_em)}</span>
                           </div>

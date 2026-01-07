@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { SistemaProvider } from "@/app/context/SistemaContext";
+import { ThemeProvider } from "@/app/context/ThemeContext";
+import { ModalManagerProvider } from "@/app/components/modals/ModalManager";
+import ThemeToggle from "@/app/components/ThemeToggle";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,10 +17,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body>
-        <SistemaProvider>
-          {children}
-        </SistemaProvider>
+      <body className="min-h-screen transition-colors">
+        <ThemeProvider>
+          <SistemaProvider>
+            <ModalManagerProvider>
+              {/* Global theme toggle (also visible on login) */}
+              <div className="fixed top-4 right-4 z-[1100]">
+                <ThemeToggle />
+              </div>
+              {children}
+            </ModalManagerProvider>
+          </SistemaProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

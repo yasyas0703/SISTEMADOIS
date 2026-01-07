@@ -3,13 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, Trash2, UserPlus, Edit, Check, User, Play, Pause } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
+import ModalBase from './ModalBase';
 
 interface ModalGerenciarUsuariosProps {
   onClose: () => void;
 }
 
 export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuariosProps) {
-  const { departamentos } = useSistema();
+  const { departamentos, mostrarAlerta } = useSistema();
   
   const [usuarios, setUsuarios] = useState([
     {
@@ -54,12 +55,12 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
 
   const handleCriarUsuario = () => {
     if (!novoUsuario.nome || !novoUsuario.senha) {
-      alert('Preencha nome e senha');
+      void mostrarAlerta('Atenção', 'Preencha nome e senha.', 'aviso');
       return;
     }
 
     if (novoUsuario.role === 'gerente' && !novoUsuario.departamento) {
-      alert('Selecione um departamento para o gerente');
+      void mostrarAlerta('Atenção', 'Selecione um departamento para o gerente.', 'aviso');
       return;
     }
 
@@ -79,7 +80,7 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
 
   const handleEditarUsuario = () => {
     if (!editandoUsuario.nome) {
-      alert('Preencha o nome do usuário');
+      void mostrarAlerta('Atenção', 'Preencha o nome do usuário.', 'aviso');
       return;
     }
 
@@ -104,22 +105,27 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-t-2xl sticky top-0 z-10">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white">Gerenciar Usuários</h3>
-              <button 
-                onClick={onClose} 
-                className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
+      <ModalBase
+        isOpen
+        onClose={onClose}
+        labelledBy="gerenciar-usuarios-title"
+        dialogClassName="w-full max-w-6xl bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none max-h-[90vh] overflow-y-auto"
+        zIndex={1080}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-t-2xl sticky top-0 z-10">
+          <div className="flex justify-between items-center">
+            <h3 id="gerenciar-usuarios-title" className="text-xl font-bold text-white">Gerenciar Usuários</h3>
+            <button 
+              onClick={onClose} 
+              className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg transition-colors"
+            >
+              <X size={20} />
+            </button>
           </div>
+        </div>
 
-          <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6">
             {/* Formulário Criar/Editar */}
             <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
               <h4 className="font-semibold text-gray-800 mb-4">
@@ -140,7 +146,7 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
                         ? setEditandoUsuario({ ...editandoUsuario, nome: e.target.value })
                         : setNovoUsuario({ ...novoUsuario, nome: e.target.value })
                       }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                     />
                   </div>
 
@@ -156,7 +162,7 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
                         ? setEditandoUsuario({ ...editandoUsuario, senha: e.target.value })
                         : setNovoUsuario({ ...novoUsuario, senha: e.target.value })
                       }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                     />
                   </div>
                 </div>
@@ -176,7 +182,7 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
                           setNovoUsuario({ ...novoUsuario, role: newRole });
                         }
                       }}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                     >
                       <option value="comum">Usuário Comum</option>
                       <option value="gerente">Gerente</option>
@@ -195,7 +201,7 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
                           ? setEditandoUsuario({ ...editandoUsuario, departamento: e.target.value })
                           : setNovoUsuario({ ...novoUsuario, departamento: e.target.value })
                         }
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                       >
                         <option value="">Selecione...</option>
                         {departamentos.map(d => (
@@ -264,15 +270,15 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
 
               <div className="space-y-3">
                 {usuarios.map(user => (
-                  <div key={user.id} className="bg-gray-50 rounded-lg p-4">
+                  <div key={user.id} className="bg-gray-50 dark:bg-[var(--muted)] rounded-lg p-4 border border-gray-200 dark:border-[var(--border)]">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
                           {user.nome.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div className="font-medium">{user.nome}</div>
-                          <div className="text-sm text-gray-600">
+                          <div className="font-medium dark:text-[var(--fg)]">{user.nome}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-300">
                             {user.role === 'admin' && 'Administrador'}
                             {user.role === 'gerente' && `Gerente - ${user.departamento}`}
                             {user.role === 'comum' && 'Usuário Comum'}
@@ -321,24 +327,29 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
               </div>
             </div>
           </div>
-        </div>
-      </div>
+      </ModalBase>
 
       {/* Modal Confirmação Exclusão */}
       {showConfirmacaoExclusao && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[100]">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4">
+        <ModalBase
+          isOpen
+          onClose={() => setShowConfirmacaoExclusao(null)}
+          labelledBy="excluir-usuario-title"
+          dialogClassName="w-full max-w-md bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none"
+          zIndex={1090}
+        >
+          <div className="rounded-2xl">
             <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 rounded-t-2xl">
-              <h3 className="text-xl font-bold text-white">Excluir Usuário</h3>
+              <h3 id="excluir-usuario-title" className="text-xl font-bold text-white">Excluir Usuário</h3>
             </div>
             <div className="p-6">
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
                 Tem certeza que deseja excluir o usuário <strong>{showConfirmacaoExclusao.nome}</strong>?
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowConfirmacaoExclusao(null)}
-                  className="flex-1 px-6 py-3 border border-gray-300 rounded-xl hover:bg-gray-100"
+                  className="flex-1 px-6 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl hover:bg-gray-100 dark:hover:bg-[var(--muted)]"
                 >
                   Cancelar
                 </button>
@@ -351,47 +362,45 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
               </div>
             </div>
           </div>
-        </div>
+        </ModalBase>
       )}
 
       {/* Modal Alteração Status */}
       {showAlteracaoStatus && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[100]">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4">
-            <div className={`bg-gradient-to-r ${
-              showAlteracaoStatus.ativo 
-                ? 'from-amber-500 to-amber-600' 
-                : 'from-green-500 to-green-600'
-            } p-6 rounded-t-2xl`}>
-              <h3 className="text-xl font-bold text-white">
+        <ModalBase
+          isOpen
+          onClose={() => setShowAlteracaoStatus(null)}
+          labelledBy="alterar-status-usuario-title"
+          dialogClassName="w-full max-w-md bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none"
+          zIndex={1095}
+        >
+          <div className="rounded-2xl">
+            <div className={`bg-gradient-to-r ${showAlteracaoStatus.ativo ? 'from-amber-500 to-amber-600' : 'from-green-500 to-green-600'} p-6 rounded-t-2xl`}>
+              <h3 id="alterar-status-usuario-title" className="text-xl font-bold text-white">
                 {showAlteracaoStatus.ativo ? 'Desativar' : 'Ativar'} Usuário
               </h3>
             </div>
             <div className="p-6">
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
                 Deseja {showAlteracaoStatus.ativo ? 'desativar' : 'ativar'} o usuário <strong>{showAlteracaoStatus.nome}</strong>?
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowAlteracaoStatus(null)}
-                  className="flex-1 px-6 py-3 border border-gray-300 rounded-xl hover:bg-gray-100"
+                  className="flex-1 px-6 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl hover:bg-gray-100 dark:hover:bg-[var(--muted)]"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={() => toggleStatusUsuario(showAlteracaoStatus)}
-                  className={`flex-1 px-6 py-3 text-white rounded-xl ${
-                    showAlteracaoStatus.ativo 
-                      ? 'bg-amber-600 hover:bg-amber-700' 
-                      : 'bg-green-600 hover:bg-green-700'
-                  }`}
+                  className={`flex-1 px-6 py-3 text-white rounded-xl ${showAlteracaoStatus.ativo ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'}`}
                 >
                   {showAlteracaoStatus.ativo ? 'Desativar' : 'Ativar'}
                 </button>
               </div>
             </div>
           </div>
-        </div>
+        </ModalBase>
       )}
     </>
   );

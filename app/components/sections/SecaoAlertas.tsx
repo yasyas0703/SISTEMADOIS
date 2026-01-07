@@ -12,7 +12,7 @@ export default function SecaoAlertas() {
     const diasRestantes = Math.ceil(
       (new Date(p.dataEntrega).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
     );
-    return diasRestantes < 5 && p.status === 'Em Andamento';
+    return diasRestantes < 5 && p.status === 'em_andamento';
   });
 
   if (processosEmRisco.length === 0) {

@@ -1,135 +1,221 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Plus, Trash2, Tag } from 'lucide-react';
+import { X, Edit, Check } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
+import ModalBase from './ModalBase';
 
 interface ModalGerenciarTagsProps {
   onClose: () => void;
 }
 
 export default function ModalGerenciarTags({ onClose }: ModalGerenciarTagsProps) {
-  const { tags, setTags } = useSistema();
-  const [novaTag, setNovaTag] = useState({ nome: '', cor: 'bg-red-500' });
+  const { tags, setTags, processos, setProcessos, mostrarAlerta, mostrarConfirmacao } = useSistema();
+  const [editando, setEditando] = useState<any>(null);
+  const [novaTag, setNovaTag] = useState({
+    nome: '',
+    cor: 'bg-red-500',
+    texto: 'text-white',
+  });
 
-  const cores = [
-    'bg-red-500',
-    'bg-orange-500',
-    'bg-yellow-500',
-    'bg-green-500',
-    'bg-blue-500',
-    'bg-indigo-500',
-    'bg-purple-500',
-    'bg-pink-500',
+  const coresDisponiveis = [
+    { bg: 'bg-red-500', text: 'text-white', nome: 'Vermelho' },
+    { bg: 'bg-orange-500', text: 'text-white', nome: 'Laranja' },
+    { bg: 'bg-yellow-500', text: 'text-white', nome: 'Amarelo' },
+    { bg: 'bg-green-500', text: 'text-white', nome: 'Verde' },
+    { bg: 'bg-blue-500', text: 'text-white', nome: 'Azul' },
+    { bg: 'bg-indigo-500', text: 'text-white', nome: 'Índigo' },
+    { bg: 'bg-purple-500', text: 'text-white', nome: 'Roxo' },
+    { bg: 'bg-pink-500', text: 'text-white', nome: 'Rosa' },
+    { bg: 'bg-gray-500', text: 'text-white', nome: 'Cinza' },
+    { bg: 'bg-cyan-500', text: 'text-white', nome: 'Ciano' },
+    { bg: 'bg-emerald-500', text: 'text-white', nome: 'Esmeralda' },
+    { bg: 'bg-amber-500', text: 'text-white', nome: 'Âmbar' },
   ];
 
-  const handleAdicionarTag = () => {
-    if (novaTag.nome) {
-      const novaTagObj = {
-        id: Math.max(...tags.map((t) => t.id), 0) + 1,
-        nome: novaTag.nome,
-        cor: novaTag.cor,
-        texto: 'text-white',
-      };
-      setTags([...tags, novaTagObj]);
-      setNovaTag({ nome: '', cor: 'bg-red-500' });
-    }
+  const adicionarTag = (tag: { nome: string; cor: string; texto?: string }) => {
+    const proximoId = Math.max(0, ...(tags || []).map((t) => Number(t.id) || 0)) + 1;
+    setTags([...(tags || []), { id: proximoId, nome: tag.nome, cor: tag.cor, texto: tag.texto || 'text-white' } as any]);
   };
 
-  const handleRemoverTag = (id: number) => {
-    setTags(tags.filter((t) => t.id !== id));
+  const editarTag = (tagId: number, dados: any) => {
+    setTags((prev) => (prev || []).map((t) => (t.id === tagId ? { ...t, ...dados } : t)));
+  };
+
+  const excluirTagDireta = (tagId: number) => {
+    void (async () => {
+      const tag = (tags || []).find((t) => t.id === tagId);
+      const ok = await mostrarConfirmacao({
+        titulo: 'Excluir Tag',
+        mensagem: `Tem certeza que deseja excluir a tag "${tag?.nome || ''}"?\n\nEsta ação não poderá ser desfeita.`,
+        tipo: 'perigo',
+        textoConfirmar: 'Sim, Excluir',
+        textoCancelar: 'Cancelar',
+      });
+      if (!ok) return;
+
+      setTags((prev) => (prev || []).filter((t) => t.id !== tagId));
+      setProcessos((prev) =>
+        (prev || []).map((p) => ({
+          ...p,
+          tags: (p.tags || []).filter((id) => id !== tagId),
+        }))
+      );
+      if (editando?.id === tagId) setEditando(null);
+    })();
+  };
+
+  const handleSalvarNova = () => {
+    if (!novaTag.nome.trim()) {
+      void mostrarAlerta('Atenção', 'Digite o nome da tag!', 'aviso');
+      return;
+    }
+    adicionarTag(novaTag);
+    setNovaTag({ nome: '', cor: 'bg-red-500', texto: 'text-white' });
+  };
+
+  const handleSalvarEdicao = () => {
+    if (!editando) return;
+    editarTag(editando.id, editando);
+    setEditando(null);
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl transform transition-all duration-300 max-h-96 overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
-          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <Tag size={24} />
-            Gerenciar Tags
-          </h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <X size={24} />
-          </button>
+    <ModalBase
+      isOpen
+      onClose={onClose}
+      labelledBy="gerenciar-tags-title"
+      dialogClassName="w-full max-w-3xl bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none max-h-[90vh] overflow-y-auto"
+      zIndex={1060}
+    >
+      <div className="rounded-2xl">
+        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 rounded-t-2xl">
+          <div className="flex justify-between items-center">
+            <h3 id="gerenciar-tags-title" className="text-xl font-bold text-white">Gerenciar Tags</h3>
+            <button onClick={onClose} className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
-        <div className="p-6 space-y-4">
-          {/* Adicionar Nova Tag */}
-          <div className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
-            <h3 className="font-semibold text-gray-900">Adicionar Tag</h3>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nome *
-                </label>
-                <input
-                  type="text"
-                  value={novaTag.nome}
-                  onChange={(e) => setNovaTag({ ...novaTag, nome: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  placeholder="Nome da tag"
-                />
-              </div>
+        <div className="p-6 space-y-6">
+          <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-200">
+            <h4 className="font-semibold text-gray-800 mb-3">Criar Nova Tag</h4>
+            <div className="space-y-4">
+              <input
+                type="text"
+                value={novaTag.nome}
+                onChange={(e) => setNovaTag({ ...novaTag, nome: e.target.value })}
+                placeholder="Nome da tag (ex: Urgente, Revisão, etc.)"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
+              />
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cor
-                </label>
-                <select
-                  value={novaTag.cor}
-                  onChange={(e) => setNovaTag({ ...novaTag, cor: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                >
-                  {cores.map((cor) => (
-                    <option key={cor} value={cor}>
-                      {cor.replace('bg-', '').replace('-500', '')}
-                    </option>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Selecione a Cor:</label>
+                <div className="grid grid-cols-6 gap-2">
+                  {coresDisponiveis.map((cor, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => setNovaTag({ ...novaTag, cor: cor.bg, texto: cor.text })}
+                      className={`w-10 h-10 rounded-full ${cor.bg} border-2 ${
+                        novaTag.cor === cor.bg
+                          ? 'border-gray-800 ring-2 ring-offset-2 ring-gray-400'
+                          : 'border-transparent'
+                      } transition-all hover:scale-110`}
+                      title={cor.nome}
+                    />
                   ))}
-                </select>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Cor selecionada: {coresDisponiveis.find((c) => c.bg === novaTag.cor)?.nome}
+                </p>
               </div>
-            </div>
 
-            <div className="flex gap-2">
-              <div className={`${novaTag.cor} text-white px-3 py-2 rounded-lg text-sm font-medium`}>
-                {novaTag.nome || 'Prévia da Tag'}
-              </div>
               <button
-                onClick={handleAdicionarTag}
-                className="flex-1 bg-cyan-500 text-white px-4 py-2 rounded-lg hover:bg-cyan-600 transition-colors flex items-center justify-center gap-2 font-medium"
+                onClick={handleSalvarNova}
+                className="w-full bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 font-medium"
               >
-                <Plus size={18} />
-                Adicionar
+                Criar Tag
               </button>
             </div>
           </div>
 
-          {/* Lista de Tags */}
-          {tags.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-semibold text-gray-900">Tags ({tags.length})</h3>
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <div
-                    key={tag.id}
-                    className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
-                  >
-                    <span className={`${tag.cor} ${tag.texto} px-2 py-0.5 rounded text-xs font-semibold`}>
-                      {tag.nome}
-                    </span>
-                    <button
-                      onClick={() => handleRemoverTag(tag.id)}
-                      className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+          <div className="space-y-3">
+            <h4 className="font-semibold text-gray-800 dark:text-[var(--fg)]">Tags Existentes ({(tags || []).length})</h4>
+
+            {(tags || []).map((tag) => (
+              <div key={tag.id} className="flex items-center justify-between bg-gray-50 dark:bg-[var(--muted)] p-4 rounded-lg border border-gray-200 dark:border-[var(--border)]">
+                {editando?.id === tag.id ? (
+                  <div className="flex gap-3 flex-1 items-center">
+                    <input
+                      type="text"
+                      value={editando.nome}
+                      onChange={(e) => setEditando({ ...editando, nome: e.target.value })}
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-[var(--border)] rounded bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
+                    />
+
+                    <select
+                      value={editando.cor}
+                      onChange={(e) => {
+                        const corSelecionada = coresDisponiveis.find((c) => c.bg === e.target.value);
+                        setEditando({
+                          ...editando,
+                          cor: e.target.value,
+                          texto: corSelecionada?.text || 'text-white',
+                        });
+                      }}
+                      className="px-3 py-2 border border-gray-300 dark:border-[var(--border)] rounded bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                     >
-                      <Trash2 size={14} />
+                      {coresDisponiveis.map((cor) => (
+                        <option key={cor.bg} value={cor.bg}>
+                          {cor.nome}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button onClick={handleSalvarEdicao} className="text-green-600 hover:text-green-700 p-2">
+                      <Check size={20} />
+                    </button>
+                    <button onClick={() => setEditando(null)} className="text-gray-600 hover:text-gray-700 p-2">
+                      <X size={20} />
                     </button>
                   </div>
-                ))}
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-4 h-4 rounded-full ${tag.cor}`}></div>
+                      <span className={`${tag.cor} ${tag.texto || 'text-white'} px-3 py-1 rounded-full text-sm font-medium`}>
+                        {tag.nome}
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setEditando(tag)}
+                        className="text-blue-600 hover:text-blue-700 p-2"
+                        title="Editar tag"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          excluirTagDireta(tag.id);
+                        }}
+                        className="text-red-600 hover:text-red-700 p-2"
+                        title="Excluir tag"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+    </ModalBase>
   );
 }
