@@ -424,3 +424,4 @@ ALTER TABLE "Notificacao" ADD CONSTRAINT "Notificacao_usuarioId_fkey" FOREIGN KE
 
 
 
+
