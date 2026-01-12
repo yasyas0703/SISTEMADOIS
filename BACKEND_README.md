@@ -14,7 +14,7 @@ Este documento descreve todo o back-end implementado seguindo o PLANO_DESENVOLVI
 #### ✅ Cliente Prisma (`app/utils/prisma.ts`)
 - Singleton do Prisma Client para evitar múltiplas conexões
 - Logs configurados para desenvolvimento
-
+ 
 #### ✅ Autenticação (`app/utils/auth.ts`)
 - Hash de senhas com bcrypt
 - Geração e verificação de JWT tokens
