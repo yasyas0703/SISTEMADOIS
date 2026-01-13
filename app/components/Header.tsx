@@ -37,19 +37,19 @@ export default function Header({
 
   const realtimeStatus = (() => {
     if (!usuarioLogado) return null;
-    if (!realtimeInfo) return { label: 'Realtime: desconhecido', className: 'bg-gray-100 text-gray-700' };
+    if (!realtimeInfo) return { label: 'Realtime: desconhecido', dotClassName: 'bg-gray-400' };
 
     const statuses = [realtimeInfo.processos, realtimeInfo.core, realtimeInfo.notificacoes];
     if (statuses.some(s => s === 'connecting')) {
-      return { label: 'Realtime: reconectando', className: 'bg-blue-100 text-blue-800' };
+      return { label: 'Realtime: reconectando', dotClassName: 'bg-blue-500' };
     }
     if (statuses.some(s => s === 'fallback')) {
-      return { label: 'Realtime: fallback', className: 'bg-yellow-100 text-yellow-800' };
+      return { label: 'Realtime: fallback', dotClassName: 'bg-yellow-500' };
     }
     if (statuses.every(s => s === 'connected')) {
-      return { label: 'Realtime: conectado', className: 'bg-green-100 text-green-800' };
+      return { label: 'Realtime: conectado', dotClassName: 'bg-green-500' };
     }
-    return { label: 'Realtime: desligado', className: 'bg-gray-100 text-gray-700' };
+    return { label: 'Realtime: desligado', dotClassName: 'bg-gray-400' };
   })();
 
   return (
@@ -80,7 +80,7 @@ export default function Header({
                 </span>
               </h1>
               <p
-                className="text-gray-600 text-sm leading-snug whitespace-nowrap truncate max-w-[220px] md:max-w-none"
+                className="text-gray-600 text-sm leading-snug whitespace-normal break-words max-w-[260px] md:max-w-none"
                 title="Gerenciamento de Processos"
               >
                 Gerenciamento de Processos
@@ -92,10 +92,14 @@ export default function Header({
           <div className="flex items-center justify-end gap-3 flex-wrap">
             {realtimeStatus && (
               <span
-                className={`px-3 py-2 rounded-xl text-xs font-semibold ${realtimeStatus.className}`}
-                title="Status do Supabase Realtime (com fallback polling quando necessário)"
+                className="inline-flex items-center"
+                title={`${realtimeStatus.label} (Supabase Realtime com fallback polling quando necessário)`}
+                aria-label={realtimeStatus.label}
               >
-                {realtimeStatus.label}
+                <span
+                  className={`h-2.5 w-2.5 rounded-full ring-2 ring-white shadow-sm ${realtimeStatus.dotClassName}`}
+                />
+                <span className="sr-only">{realtimeStatus.label}</span>
               </span>
             )}
             {/* Notificações */}
