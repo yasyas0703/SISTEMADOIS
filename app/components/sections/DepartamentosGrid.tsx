@@ -106,9 +106,19 @@ export default function DepartamentosGrid({
     );
   }
 
+  // Ordenar departamentos pelo campo ordem (ou id como fallback)
+  const departamentosOrdenados = [...departamentos].sort((a, b) => {
+    if (typeof a.ordem === 'number' && typeof b.ordem === 'number') {
+      return a.ordem - b.ordem;
+    }
+    if (typeof a.ordem === 'number') return -1;
+    if (typeof b.ordem === 'number') return 1;
+    return a.id - b.id;
+  });
+
   return (
     <>
-      {departamentos.map((dept, index) => {
+      {departamentosOrdenados.map((dept, index) => {
         const processosNoDept = processos.filter(
           (p) => p.departamentoAtual === dept.id && p.status === 'em_andamento'
         );
