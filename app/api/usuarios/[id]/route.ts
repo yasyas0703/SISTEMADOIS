@@ -13,6 +13,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    console.time('GET /api/usuarios/:id');
     const { user, error } = await requireAuth(request);
     if (!user) return error;
 
@@ -20,6 +21,7 @@ export async function GET(
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 });
     }
 
+    // Promise.all para buscar usuário e departamento em paralelo se necessário (aqui só 1 query, mas já deixo padrão)
     const usuario = await prisma.usuario.findUnique({
       where: { id: parseInt(params.id) },
       select: {
@@ -34,14 +36,15 @@ export async function GET(
         criadoEm: true,
       },
     });
-    
+
     if (!usuario) {
+      console.timeEnd('GET /api/usuarios/:id');
       return NextResponse.json(
         { error: 'Usuário não encontrado' },
         { status: 404 }
       );
     }
-    
+    console.timeEnd('GET /api/usuarios/:id');
     return NextResponse.json(usuario);
   } catch (error) {
     console.error('Erro ao buscar usuário:', error);
@@ -58,6 +61,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    console.time('PUT /api/usuarios/:id');
     const { user, error } = await requireAuth(request);
     if (!user) return error;
 
@@ -70,8 +74,17 @@ export async function PUT(
 
     // GERENTE não pode promover/alterar ADMIN
     const targetId = parseInt(params.id);
-    const target = await prisma.usuario.findUnique({ where: { id: targetId }, select: { id: true, role: true, ativo: true } });
+    const departamentoIdRaw = data?.departamentoId;
+    const departamentoId = Number.isFinite(Number(departamentoIdRaw)) ? Number(departamentoIdRaw) : undefined;
+    // Busca target e departamento em paralelo se possível
+    const [target, dept] = await Promise.all([
+      prisma.usuario.findUnique({ where: { id: targetId }, select: { id: true, role: true, ativo: true } }),
+      (typeof departamentoId === 'number')
+        ? prisma.departamento.findUnique({ where: { id: departamentoId }, select: { id: true, ativo: true } })
+        : Promise.resolve(undefined)
+    ]);
     if (!target) {
+      console.timeEnd('PUT /api/usuarios/:id');
       return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
     }
     const requesterIsAdmin = requireRole(user, ['ADMIN']);
@@ -105,17 +118,14 @@ export async function PUT(
     const nextRoleUpper = data.role ? String(data.role).toUpperCase() : undefined;
     const roleFinalUpper = nextRoleUpper ?? String(target.role).toUpperCase();
 
-    const departamentoIdRaw = data?.departamentoId;
-    const departamentoId = Number.isFinite(Number(departamentoIdRaw)) ? Number(departamentoIdRaw) : undefined;
-
     // Se está definindo/alterando para USUARIO/GERENTE, exige departamento
     if ((roleFinalUpper === 'USUARIO' || roleFinalUpper === 'GERENTE') && typeof departamentoId !== 'number') {
       return NextResponse.json({ error: 'Departamento é obrigatório para usuário/gerente' }, { status: 400 });
     }
 
     if (typeof departamentoId === 'number') {
-      const dept = await prisma.departamento.findUnique({ where: { id: departamentoId }, select: { id: true, ativo: true } });
       if (!dept || !dept.ativo) {
+        console.timeEnd('PUT /api/usuarios/:id');
         return NextResponse.json({ error: 'Departamento inválido' }, { status: 400 });
       }
     }
@@ -151,6 +161,7 @@ export async function PUT(
       },
     });
     
+    console.timeEnd('PUT /api/usuarios/:id');
     return NextResponse.json(usuario);
   } catch (error: any) {
     console.error('Erro ao atualizar usuário:', error);
@@ -173,6 +184,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    console.time('DELETE /api/usuarios/:id');
     const { user, error } = await requireAuth(request);
     if (!user) return error;
 
@@ -183,13 +195,14 @@ export async function DELETE(
 
     const target = await prisma.usuario.findUnique({ where: { id: parseInt(params.id) }, select: { id: true, role: true } });
     if (!target) {
+      console.timeEnd('DELETE /api/usuarios/:id');
       return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
     }
 
     await prisma.usuario.delete({
       where: { id: parseInt(params.id) },
     });
-    
+    console.timeEnd('DELETE /api/usuarios/:id');
     return NextResponse.json({ message: 'Usuário excluído com sucesso' });
   } catch (error) {
     console.error('Erro ao excluir usuário:', error);

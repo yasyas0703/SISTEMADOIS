@@ -11,6 +11,7 @@ export const preferredRegion = 'gru1';
 // GET /api/usuarios
 export async function GET(request: NextRequest) {
   try {
+    console.time('GET /api/usuarios');
     const { user, error } = await requireAuth(request);
     if (!user) return error;
 
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { nome: 'asc' },
     });
-    
+    console.timeEnd('GET /api/usuarios');
     return NextResponse.json(usuarios);
   } catch (error) {
     console.error('Erro ao buscar usuários:', error);
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest) {
 // POST /api/usuarios
 export async function POST(request: NextRequest) {
   try {
+    console.time('POST /api/usuarios');
     const { user, error } = await requireAuth(request);
     if (!user) return error;
 
@@ -69,9 +71,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Departamento é obrigatório para usuário/gerente' }, { status: 400 });
     }
 
+    let dept;
     if (typeof departamentoId === 'number') {
-      const dept = await prisma.departamento.findUnique({ where: { id: departamentoId }, select: { id: true, ativo: true } });
+      dept = await prisma.departamento.findUnique({ where: { id: departamentoId }, select: { id: true, ativo: true } });
       if (!dept || !dept.ativo) {
+        console.timeEnd('POST /api/usuarios');
         return NextResponse.json({ error: 'Departamento inválido' }, { status: 400 });
       }
     }
@@ -126,9 +130,11 @@ export async function POST(request: NextRequest) {
             },
           },
         });
+        console.timeEnd('POST /api/usuarios');
         return NextResponse.json({ ...usuarioReativado, reativado: true });
       }
 
+      console.timeEnd('POST /api/usuarios');
       return NextResponse.json(
         {
           error: 'Email já cadastrado',
@@ -144,7 +150,6 @@ export async function POST(request: NextRequest) {
     }
     
     const senhaHash = await hashPassword(senha);
-    
     const usuario = await prisma.usuario.create({
       data: {
         nome,
@@ -166,7 +171,7 @@ export async function POST(request: NextRequest) {
         },
       },
     });
-    
+    console.timeEnd('POST /api/usuarios');
     return NextResponse.json(usuario, { status: 201 });
   } catch (error: any) {
     console.error('Erro ao criar usuário:', error);
