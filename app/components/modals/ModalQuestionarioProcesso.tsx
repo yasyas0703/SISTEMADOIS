@@ -51,12 +51,15 @@ export default function ModalQuestionarioProcesso({
 
   const modalContainerRef = React.useRef<HTMLDivElement | null>(null);
 
+  // DEBUG: log dos parâmetros e questionário
+  console.log('DEBUG ModalQuestionarioProcesso', { processoId, departamentoId, processo });
   const questionarioAtual: Questionario[] =
     ((processo?.questionariosPorDepartamento as any)?.[String(departamentoId)] as any) ||
     (processo?.questionarioSolicitacao as any) ||
     (processo as any)?.questionario ||
     (processo as any)?.questionarios ||
     [];
+  console.log('DEBUG questionarioAtual', questionarioAtual);
 
   React.useEffect(() => {
     let cancelled = false;
