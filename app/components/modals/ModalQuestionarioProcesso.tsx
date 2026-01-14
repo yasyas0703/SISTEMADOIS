@@ -67,6 +67,18 @@ export default function ModalQuestionarioProcesso({
     questionarioAtual = (processo as any).questionarios;
   }
   console.log('DEBUG questionarioAtual', questionarioAtual);
+
+  // Exibir loading enquanto carrega o processo detalhado e não há questionário
+  if (carregandoProcesso && questionarioAtual.length === 0) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col items-center justify-center p-10">
+          <span className="text-lg font-semibold mb-4">Carregando questionário...</span>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
+        </div>
+      </div>
+    );
+  }
   console.log('DEBUG questionarioAtual', questionarioAtual);
 
   React.useEffect(() => {
