@@ -122,11 +122,17 @@ export async function GET(request: NextRequest) {
 
 // POST /api/processos
 export async function POST(request: NextRequest) {
+
   try {
+    const t0 = Date.now();
+    console.log('[LOG] INÍCIO POST /api/processos', t0);
+
     const { user, error } = await requireAuth(request);
     if (!user) return error;
-    
+    console.log('[LOG] requireAuth:', Date.now() - t0, 'ms');
+
     const data = await request.json();
+    console.log('[LOG] request.json:', Date.now() - t0, 'ms');
 
     const roleUpper = String((user as any).role || '').toUpperCase();
     const departamentoUsuarioRaw = (user as any).departamentoId ?? (user as any).departamento_id;
@@ -145,6 +151,7 @@ export async function POST(request: NextRequest) {
       select: { id: true },
       orderBy: { ordem: 'asc' },
     });
+    console.log('[LOG] prisma.departamento.findMany:', Date.now() - t0, 'ms');
     const deptIds = new Set<number>(departamentosAtivos.map((d) => d.id));
 
     const fluxo = fluxoParsed.filter((id) => deptIds.has(id));
@@ -154,6 +161,7 @@ export async function POST(request: NextRequest) {
         : fluxo[0] ?? departamentosAtivos[0]?.id);
 
     if (!departamentoInicial || !Number.isFinite(departamentoInicial)) {
+      console.log('[LOG] Departamento inicial inválido:', Date.now() - t0, 'ms');
       return NextResponse.json({ error: 'Departamento inicial inválido' }, { status: 400 });
     }
 
@@ -164,6 +172,7 @@ export async function POST(request: NextRequest) {
 
     // Usuário normal NÃO pode criar solicitação personalizada
     if (personalizado && roleUpper === 'USUARIO') {
+      console.log('[LOG] Sem permissão para criar solicitação personalizada:', Date.now() - t0, 'ms');
       return NextResponse.json(
         { error: 'Sem permissão para criar solicitação personalizada' },
         { status: 403 }
@@ -175,11 +184,13 @@ export async function POST(request: NextRequest) {
 
     // Usuário comum e gerente devem ter departamento definido
     if ((roleUpper === 'USUARIO' || roleUpper === 'GERENTE') && typeof departamentoUsuario !== 'number') {
+      console.log('[LOG] Usuário sem departamento definido:', Date.now() - t0, 'ms');
       return NextResponse.json({ error: 'Usuário sem departamento definido' }, { status: 403 });
     }
 
     // Usuário comum e gerente: só podem criar solicitação cujo primeiro dept seja o deles
     if ((roleUpper === 'USUARIO' || roleUpper === 'GERENTE') && departamentoInicial !== departamentoUsuario) {
+      console.log('[LOG] Sem permissão para criar solicitação para outro departamento:', Date.now() - t0, 'ms');
       return NextResponse.json({ error: 'Sem permissão para criar solicitação para outro departamento' }, { status: 403 });
     }
 
@@ -221,14 +232,18 @@ export async function POST(request: NextRequest) {
 
     // Se veio responsavelId, valida se existe e está ativo
     if (typeof responsavelId === 'number') {
+      const tResp = Date.now();
       const resp = await prisma.usuario.findUnique({ where: { id: responsavelId }, select: { id: true, ativo: true, nome: true } });
+      console.log('[LOG] prisma.usuario.findUnique:', Date.now() - t0, 'ms');
       if (!resp || !resp.ativo) {
+        console.log('[LOG] Responsável inválido:', Date.now() - t0, 'ms');
         return NextResponse.json({ error: 'Responsável inválido' }, { status: 400 });
       }
       responsavelNome = resp.nome;
       responsavelAtivoId = resp.id;
     }
 
+    const tProcesso = Date.now();
     const processo = await prisma.processo.create({
       data: {
         nome: data.nome,
@@ -260,9 +275,11 @@ export async function POST(request: NextRequest) {
         ...({ responsavel: { select: { id: true, nome: true, email: true } } } as any),
       },
     });
+    console.log('[LOG] prisma.processo.create:', Date.now() - t0, 'ms');
 
     // Notificação persistida: somente gerentes do departamento e responsável (se definido)
     try {
+      const tNotif = Date.now();
       // gerentes do dept inicial
       const gerentes = await prisma.usuario.findMany({
         where: {
@@ -272,6 +289,7 @@ export async function POST(request: NextRequest) {
         },
         select: { id: true },
       });
+      console.log('[LOG] prisma.usuario.findMany (gerentes):', Date.now() - t0, 'ms');
 
       const ids = new Set<number>(gerentes.map((g) => g.id));
 
@@ -296,6 +314,7 @@ export async function POST(request: NextRequest) {
             link: `/`,
           })),
         });
+        console.log('[LOG] prisma.notificacao.createMany:', Date.now() - t0, 'ms');
       }
     } catch (e) {
       console.error('Erro ao criar notificações de criação:', e);
@@ -306,6 +325,7 @@ export async function POST(request: NextRequest) {
     // OBS: o front usa ids temporários (Date.now()). Aqui criamos as perguntas e mapeamos
     // os ids temporários para os ids reais para manter as condições funcionando.
     try {
+      const tQuestionario = Date.now();
       const qpd = data?.questionariosPorDepartamento;
       if (qpd && typeof qpd === 'object') {
         await prisma.$transaction(async (tx) => {
@@ -379,6 +399,7 @@ export async function POST(request: NextRequest) {
             }
           }
         });
+        console.log('[LOG] prisma.$transaction (questionarios):', Date.now() - t0, 'ms');
       }
     } catch (e) {
       // Não quebra a criação do processo caso falhe ao persistir questionários
@@ -386,6 +407,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Criar histórico inicial
+    const tHistorico = Date.now();
     await prisma.historicoEvento.create({
       data: {
         processoId: processo.id,
@@ -396,6 +418,7 @@ export async function POST(request: NextRequest) {
         dataTimestamp: BigInt(Date.now()),
       },
     });
+    console.log('[LOG] prisma.historicoEvento.create:', Date.now() - t0, 'ms');
     
     // Criar histórico de fluxo inicial
     if (data.departamentoAtual) {
@@ -408,8 +431,10 @@ export async function POST(request: NextRequest) {
           entradaEm: new Date(),
         },
       });
+      console.log('[LOG] prisma.historicoFluxo.create:', Date.now() - t0, 'ms');
     }
     
+    console.log('[LOG] FIM POST /api/processos:', Date.now() - t0, 'ms');
     return NextResponse.json(processo, { status: 201 });
   } catch (error) {
     console.error('Erro ao criar processo:', error);
