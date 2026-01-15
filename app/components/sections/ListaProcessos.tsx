@@ -553,7 +553,7 @@ export default function ListaProcessos({
 
                   {(processo.tags || []).length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {processo.tags.map((tagId) => {
+                      {(processo.tags || []).map((tagId) => {
                         const tag = (tags || []).find((t) => t.id === tagId);
                         return tag ? (
                           <span key={tagId} className={`${tag.cor} text-white px-2 py-0.5 rounded text-xs`}>

@@ -468,7 +468,7 @@ export function SistemaProvider({ children }: { children: React.ReactNode }) {
         })();
 
         // Admin: usuários também em background
-        if (usuarioLogado.role === 'admin') {
+        if (usuarioLogado && usuarioLogado.role === 'admin') {
           void (async () => {
             const usuariosRes = await Promise.allSettled([api.getUsuarios()]);
             if (cancelled) return;

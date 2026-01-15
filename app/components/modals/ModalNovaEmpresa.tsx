@@ -91,6 +91,10 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
   };
 
   const adicionarPergunta = (tipo: string) => {
+    if (departamentoSelecionado == null) {
+      void mostrarAlerta('Atenção', 'Selecione um departamento antes de adicionar perguntas!', 'aviso');
+      return;
+    }
     const novaPergunta = {
       id: Date.now(),
       label: "",
@@ -109,16 +113,19 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
       return;
     }
 
-    const perguntasDepto = questionariosPorDept[departamentoSelecionado] || [];
+    const perguntasDepto = departamentoSelecionado !== null ? questionariosPorDept[departamentoSelecionado] || [] : [];
 
-    if (perguntasDepto.find((p: any) => p.id === editandoPergunta.id)) {
+    if (
+      departamentoSelecionado !== null &&
+      perguntasDepto.find((p: any) => p.id === editandoPergunta.id)
+    ) {
       setQuestionariosPorDept({
         ...questionariosPorDept,
         [departamentoSelecionado]: perguntasDepto.map((p: any) =>
           p.id === editandoPergunta.id ? editandoPergunta : p
         )
       });
-    } else {
+    } else if (departamentoSelecionado !== null) {
       setQuestionariosPorDept({
         ...questionariosPorDept,
         [departamentoSelecionado]: [...perguntasDepto, editandoPergunta]
@@ -129,12 +136,14 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
   };
 
   const excluirPergunta = (perguntaId: number) => {
-    setQuestionariosPorDept({
-      ...questionariosPorDept,
-      [departamentoSelecionado]: questionariosPorDept[departamentoSelecionado].filter(
-        (p: any) => p.id !== perguntaId
-      )
-    });
+    if (departamentoSelecionado !== null) {
+      setQuestionariosPorDept({
+        ...questionariosPorDept,
+        [departamentoSelecionado]: questionariosPorDept[departamentoSelecionado].filter(
+          (p: any) => p.id !== perguntaId
+        )
+      });
+    }
   };
 
   const adicionarOpcao = () => {

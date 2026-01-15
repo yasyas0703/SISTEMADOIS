@@ -189,7 +189,7 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
 
     const dadosParaSalvar: Partial<Empresa> = {
       ...formData,
-      cnpj: formData.cnpj ? String(formData.cnpj) : null,
+      cnpj: formData.cnpj ? String(formData.cnpj) : undefined,
       cadastrada: cadastrada,
     };
 
