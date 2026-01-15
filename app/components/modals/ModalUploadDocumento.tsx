@@ -22,7 +22,7 @@ export default function ModalUploadDocumento({
   perguntaLabel = null,
   onClose,
 }: ModalUploadDocumentoProps) {
-  const { adicionarDocumentoProcesso, adicionarNotificacao, mostrarAlerta } = useSistema();
+  const { adicionarDocumentoProcesso, adicionarNotificacao, mostrarAlerta, setProcessos } = useSistema();
   const [uploading, setUploading] = React.useState(false);
   const [arquivos, setArquivos] = React.useState<Array<{ id: number; nome: string; tamanho: number; tipo: string; file: File }>>([]);
   const [arrastando, setArrastando] = React.useState(false);
@@ -111,12 +111,28 @@ export default function ModalUploadDocumento({
 
   const handleRemover = async (id: number) => {
     if (!processo) return;
+    const prev = documentosLocal.slice();
     try {
       setUploading(true);
+
+      // Remoção imediata local para feedback instantâneo
+      setDocumentosLocal(prevList => prevList.filter((d: any) => d.id !== id));
+
       await api.excluirDocumento(id);
-      setDocumentosLocal(prev => prev.filter((d: any) => d.id !== id));
+
+      // Recarrega o processo atualizado do servidor e atualiza o estado global
+      try {
+        const processoAtualizado = await api.getProcesso(processo.id);
+        setProcessos((prevState: any) => prevState.map((p: any) => (p.id === processo.id ? processoAtualizado : p)));
+        setDocumentosLocal(processoAtualizado.documentos || []);
+      } catch (err) {
+        // Se falhar ao recarregar, mantemos a remoção local já aplicada
+      }
+
       adicionarNotificacao('Documento excluído com sucesso', 'sucesso');
     } catch (err: any) {
+      // Restaura lista local em caso de erro para evitar perder o item
+      setDocumentosLocal(prev);
       const msg = err instanceof Error ? err.message : 'Erro ao excluir documento';
       await mostrarAlerta('Erro', msg, 'erro');
     } finally {
@@ -238,14 +254,19 @@ export default function ModalUploadDocumento({
                         <p className="text-xs text-gray-600 dark:text-gray-300">{formatarTamanhoParcela(Number(doc.tamanho || 0))} • {formatarDataHora(doc.dataUpload)}</p>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => handleDownload(doc)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-[#132235] rounded transition-colors">
-                        <Download size={18} />
-                      </button>
-                      <button onClick={() => handleRemover(doc.id)} className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-[#3b1f26] rounded transition-colors">
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
+                                    <div className="flex gap-2">
+                                      <button type="button" onClick={() => handleDownload(doc)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-[#132235] rounded transition-colors">
+                                        <Download size={18} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleRemover(doc.id)}
+                                        disabled={uploading}
+                                        aria-disabled={uploading}
+                                        className={`p-2 ${uploading ? 'opacity-50 cursor-not-allowed' : 'text-red-600 hover:bg-red-50 dark:hover:bg-[#3b1f26]'} rounded transition-colors`}
+                                      >
+                                        <Trash2 size={18} />
+                                      </button>
+                                    </div>
                   </div>
                 ))}
               </div>

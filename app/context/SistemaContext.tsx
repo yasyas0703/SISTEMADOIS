@@ -150,6 +150,7 @@ export function SistemaProvider({ children }: { children: React.ReactNode }) {
   const [inicializandoUsuario, setInicializandoUsuario] = useState(true);
   const notificacoesRef = useRef<Notificacao[]>([]);
   const realtimeProcessosTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipPreserveDetailsRef = useRef<boolean>(false);
   const processosPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const processosRealtimeStatusRef = useRef<'idle' | 'subscribed' | 'error'>('idle');
 
@@ -578,7 +579,8 @@ export function SistemaProvider({ children }: { children: React.ReactNode }) {
               const existing = existingMap.get(id);
 
               // Preserve details (questionários/respostas/documentos) if already present in state
-              const existingHasDetails = existing && (
+              // Decide se preservamos o objeto existente (com detalhes locais)
+              const existingHasDetails = existing && !skipPreserveDetailsRef.current && (
                 (Array.isArray(existing.questionarios) && existing.questionarios.length > 0) ||
                 (existing.questionariosPorDepartamento && Object.keys(existing.questionariosPorDepartamento).length > 0) ||
                 (existing.respostasHistorico && Object.keys(existing.respostasHistorico || {}).length > 0) ||
@@ -596,6 +598,9 @@ export function SistemaProvider({ children }: { children: React.ReactNode }) {
 
             // Append any leftover existing processes not present in the fetched list
             for (const leftover of existingMap.values()) merged.push(leftover);
+
+            // Reset flag after applying a merge that used it
+            skipPreserveDetailsRef.current = false;
 
             return merged;
           } catch (err) {
@@ -655,13 +660,15 @@ export function SistemaProvider({ children }: { children: React.ReactNode }) {
         scheduleRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'Comentario' }, () => scheduleRefresh())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'Documento' }, () => scheduleRefresh())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'Documento' }, (payload) => {
         if (process.env.NODE_ENV !== 'production') {
           try {
             console.log('[realtime] Documento change', payload?.eventType, payload);
           } catch {}
         }
+        // Quando documentos mudam, não preservamos o array `documentos` existente
+        // para evitar manter itens já removidos localmente. Força refresh completo.
+        skipPreserveDetailsRef.current = true;
         scheduleRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'Notificacao' }, () => scheduleRefresh())

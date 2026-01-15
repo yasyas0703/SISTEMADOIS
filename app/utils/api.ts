@@ -656,9 +656,20 @@ export const api = {
       const response = await fetchAutenticado(`${API_URL}/documentos/${id}`, {
         method: 'DELETE'
       });
+
+      // Se o documento já não existir, tratamos como sucesso (já removido)
+      if (response.status === 404) {
+        try {
+          const body = await response.json().catch(() => ({} as any));
+          console.warn('Excluir documento: já ausente no servidor', id, body);
+        } catch {}
+        return { alreadyDeleted: true };
+      }
+
       if (!response.ok) {
         throw new Error(await parseError(response));
       }
+
       return await response.json();
     } catch (error) {
       console.error('Erro ao excluir documento:', error);

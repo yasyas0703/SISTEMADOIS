@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { X, ExternalLink, Download, FileText } from 'lucide-react';
 import { formatarDataHora, formatarTamanhoParcela } from '@/app/utils/helpers';
@@ -21,6 +21,52 @@ interface ModalPreviewDocumentoProps {
 export default function ModalPreviewDocumento({ documento, onClose }: ModalPreviewDocumentoProps) {
   const isImage = (documento?.tipo || '').startsWith('image/');
   const isPdf = documento?.tipo === 'application/pdf' || documento?.nome?.toLowerCase()?.endsWith('.pdf');
+  const [urlAvailable, setUrlAvailable] = useState<boolean | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    setUrlAvailable(null);
+    setUrlError(null);
+
+    const check = async () => {
+      if (!documento?.url) {
+        if (mounted) {
+          setUrlAvailable(false);
+          setUrlError('URL do documento ausente');
+        }
+        return;
+      }
+
+      try {
+        // Tenta um HEAD para checar existência; caso o servidor não permita HEAD, tenta GET com modo 'no-cors' falhando graciosamente
+        const resp = await fetch(documento.url, { method: 'HEAD' });
+        if (!mounted) return;
+        if (resp.ok) {
+          setUrlAvailable(true);
+        } else {
+          let msg = `Recurso indisponível (status ${resp.status})`;
+          try {
+            const body = await resp.json().catch(() => null);
+            if (body && (body.message || body.error)) msg = body.message || body.error || msg;
+          } catch {}
+          setUrlAvailable(false);
+          setUrlError(msg);
+        }
+      } catch (err: any) {
+        if (!mounted) return;
+        // Falhas de CORS ou rede: permitimos abrir em nova aba, mas avisamos que não foi possível verificar
+        setUrlAvailable(false);
+        setUrlError('Não foi possível verificar o arquivo (CORS/erro de rede). Abra em nova aba para confirmar.');
+      }
+    };
+
+    check();
+
+    return () => {
+      mounted = false;
+    };
+  }, [documento?.url]);
 
   const abrirNovaAba = () => {
     try {
@@ -62,25 +108,45 @@ export default function ModalPreviewDocumento({ documento, onClose }: ModalPrevi
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-0 h-[calc(90vh-112px)]">
           <div className="md:col-span-3 h-full bg-gray-50 dark:bg-[var(--muted)] flex items-center justify-center overflow-auto">
-            {isImage && (
-              <Image
-                src={documento.url}
-                alt={documento.nome}
-                width={1600}
-                height={1200}
-                unoptimized
-                className="max-w-full max-h-full object-contain"
-              />
+            {urlAvailable === null && (
+              <div className="text-center text-gray-500 dark:text-gray-300 p-8">Verificando disponibilidade...</div>
             )}
-            {isPdf && (
-              <iframe src={documento.url} className="w-full h-full" title="Pré-visualização PDF" />
-            )}
-            {!isImage && !isPdf && (
+
+            {urlAvailable === false && (
               <div className="text-center text-gray-500 dark:text-gray-300 p-8">
                 <FileText size={48} className="mx-auto mb-3 opacity-40" />
-                <p>Pré-visualização não disponível para este tipo de arquivo.</p>
-                <button onClick={abrirNovaAba} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">Abrir em outra aba</button>
+                <p className="mb-2">Arquivo não disponível: {urlError ?? 'Não encontrado'}</p>
+                <div className="flex justify-center gap-2">
+                  <button onClick={abrirNovaAba} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Abrir em outra aba</button>
+                  <button onClick={baixar} className="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg">Baixar</button>
+                </div>
               </div>
+            )}
+
+            {urlAvailable === true && (
+              <>
+                {isImage && (
+                  <Image
+                    src={documento.url}
+                    alt={documento.nome}
+                    width={1600}
+                    height={1200}
+                    unoptimized
+                    className="max-w-full max-h-full object-contain"
+                    onError={() => { setUrlAvailable(false); setUrlError('Falha ao carregar imagem'); }}
+                  />
+                )}
+                {isPdf && (
+                  <iframe src={documento.url} className="w-full h-full" title="Pré-visualização PDF" />
+                )}
+                {!isImage && !isPdf && (
+                  <div className="text-center text-gray-500 dark:text-gray-300 p-8">
+                    <FileText size={48} className="mx-auto mb-3 opacity-40" />
+                    <p>Pré-visualização não disponível para este tipo de arquivo.</p>
+                    <button onClick={abrirNovaAba} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">Abrir em outra aba</button>
+                  </div>
+                )}
+              </>
             )}
           </div>
           <div className="md:col-span-1 border-l border-gray-200 dark:border-[var(--border)] p-4 space-y-2">

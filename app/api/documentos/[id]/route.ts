@@ -15,15 +15,22 @@ export async function DELETE(
   try {
     const { user, error } = await requireAuth(request);
     if (!user) return error;
-    
+    const idRaw = params.id;
+    const docId = Number(idRaw);
+    if (!Number.isFinite(docId) || Number.isNaN(docId)) {
+      console.warn('DELETE /api/documentos/:id recebido com id inválido', idRaw);
+      return NextResponse.json({ error: 'id inválido' }, { status: 400 });
+    }
+
     // Buscar documento
     const documento = await prisma.documento.findUnique({
-      where: { id: parseInt(params.id) },
+      where: { id: docId },
     });
-    
+
     if (!documento) {
+      console.warn(`Documento não encontrado ao excluir, id=${docId}`);
       return NextResponse.json(
-        { error: 'Documento não encontrado' },
+        { error: 'Documento não encontrado', id: docId },
         { status: 404 }
       );
     }

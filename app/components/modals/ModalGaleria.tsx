@@ -16,9 +16,11 @@ interface GaleriaDocumentosProps {
 
 export default function GaleriaDocumentos({ onClose, departamentoId, processoId, titulo }: GaleriaDocumentosProps) {
   const { processos, departamentos, setProcessos, adicionarNotificacao, mostrarAlerta, setShowPreviewDocumento } = useSistema();
+  const { mostrarConfirmacao } = useSistema();
 
   const [docsCarregados, setDocsCarregados] = React.useState<Documento[]>([]);
   const [carregando, setCarregando] = React.useState(false);
+  const [processingId, setProcessingId] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -138,28 +140,64 @@ export default function GaleriaDocumentos({ onClose, departamentoId, processoId,
 
   const handleApagar = async (doc: Documento) => {
     try {
-      await api.excluirDocumento(doc.id);
+      const confirmado = await mostrarConfirmacao({
+        titulo: 'Confirmar exclusão',
+        mensagem: `Deseja realmente excluir o documento "${doc.nome}"? Esta ação não pode ser desfeita.`,
+        tipo: 'perigo',
+        textoConfirmar: 'Sim, excluir',
+        textoCancelar: 'Cancelar',
+      });
+      if (!confirmado) return;
+    } catch {
+      return;
+    }
+    const id = Number(doc.id);
+    const prevDocs = docsCarregados.slice();
+    const prevProcessos = (processos || []).slice();
+    try {
+      setProcessingId(id);
 
-      // Se a galeria foi aberta com processoId, a fonte de verdade é o backend (docsCarregados)
+      // Remoção otimista local imediata
       if (typeof processoId === 'number') {
-        setDocsCarregados(prev => prev.filter((d: any) => Number(d.id) !== Number(doc.id)));
+        setDocsCarregados(prev => prev.filter((d: any) => Number(d.id) !== id));
+        // Também atualiza o estado global para manter tudo em sincronia
+        setProcessos(prev => prev.map((p: any) => {
+          if (Number(p.id) !== Number(processoId)) return p;
+          return {
+            ...p,
+            documentos: Array.isArray(p.documentos)
+              ? p.documentos.filter((d: any) => Number(d.id) !== id)
+              : p.documentos,
+          };
+        }));
       } else {
-        // Fallback: remove da lista em memória (não faz PUT em /processos)
         setProcessos(prev => prev.map((p: any) => {
           if (Number(p.id) !== Number(doc.processoId)) return p;
           return {
             ...p,
             documentos: Array.isArray(p.documentos)
-              ? p.documentos.filter((d: any) => Number(d.id) !== Number(doc.id))
+              ? p.documentos.filter((d: any) => Number(d.id) !== id)
               : p.documentos,
           };
         }));
       }
 
+      const res = await api.excluirDocumento(id);
+
+      // API may return { alreadyDeleted: true } for 404, treat as success
+      if (res && (res.alreadyDeleted === true || res.message || res.message === 'Documento excluído com sucesso')) {
+        // nothing more to do
+      }
+
       adicionarNotificacao('Documento excluído com sucesso', 'sucesso');
     } catch (err: any) {
+      // Restaura estado anterior em caso de erro
+      setDocsCarregados(prevDocs);
+      setProcessos(prevProcessos);
       const msg = err instanceof Error ? err.message : 'Erro ao excluir documento';
       await mostrarAlerta('Erro', msg, 'erro');
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -221,7 +259,9 @@ export default function GaleriaDocumentos({ onClose, departamentoId, processoId,
                     </button>
                     <button
                       onClick={() => handleApagar(doc)}
-                      className="flex-1 p-2 text-red-600 hover:bg-red-50 rounded transition-colors flex items-center justify-center gap-1"
+                      disabled={processingId === doc.id}
+                      aria-disabled={processingId === doc.id}
+                      className={`flex-1 p-2 ${processingId === doc.id ? 'opacity-50 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'} rounded transition-colors flex items-center justify-center gap-1`}
                     >
                       <Trash2 size={14} />
                       <span className="text-xs">Apagar</span>
