@@ -5,6 +5,7 @@ import { X, ArrowRight, Edit, Plus, ClipboardList, Mail, Phone } from 'lucide-re
 import { useSistema } from '@/app/context/SistemaContext';
 import { Empresa } from '@/app/types';
 import ModalBase from './ModalBase';
+import LoadingOverlay from '../LoadingOverlay';
 import { api } from '@/app/utils/api';
 // (Telefone/email inputs ainda não presentes aqui; removendo imports não utilizados)
 
@@ -29,6 +30,7 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
   const [editandoPergunta, setEditandoPergunta] = useState<any>(null);
   const [fluxoDepartamentos, setFluxoDepartamentos] = useState<number[]>([]);
   const [salvarComoTemplateChecked, setSalvarComoTemplateChecked] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let ativo = true;
@@ -200,6 +202,7 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
     }
 
     try {
+      setLoading(true);
       const responsavelSelecionado = usuariosResponsaveis.find((u) => u.id === responsavelId) ?? null;
       await criarProcesso({
         nome: nomeServico,
@@ -232,12 +235,15 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
       onClose();
     } catch (error: any) {
       void mostrarAlerta('Erro', error.message || 'Erro ao criar solicitação', 'erro');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <ModalBase isOpen onClose={onClose} labelledBy="nova-solic-title" dialogClassName="w-full max-w-6xl bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none max-h-[90vh] overflow-y-auto" zIndex={1050}>
-      <div className="rounded-2xl">
+      <div className="rounded-2xl relative">
+        <LoadingOverlay show={loading} text="Criando solicitação..." />
         {/* Header */}
         <div className="bg-gradient-to-r from-cyan-500 to-blue-600 p-6 rounded-t-2xl sticky top-0 z-10">
           <div className="flex justify-between items-center">

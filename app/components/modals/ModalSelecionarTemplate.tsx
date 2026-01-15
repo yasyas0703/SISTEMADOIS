@@ -5,6 +5,7 @@ import { X, FileText, Info, MoreVertical, Trash2, Mail, Phone, ClipboardList } f
 import { useSistema } from '@/app/context/SistemaContext';
 import { Template } from '@/app/types';
 import { api } from '@/app/utils/api';
+import LoadingOverlay from '../LoadingOverlay';
 
 interface ModalSelecionarTemplateProps {
   onClose: () => void;
@@ -30,6 +31,7 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
   const [templateComTooltip, setTemplateComTooltip] = useState<number | null>(null);
   const [templateComTooltipNome, setTemplateComTooltipNome] = useState<number | null>(null);
   const [showMenuTemplate, setShowMenuTemplate] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const templatesDisponiveis: Template[] = templates || [];
 
@@ -149,6 +151,7 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
     }
 
     try {
+      setLoading(true);
       await criarProcesso({
         nome: template.nome,
         nomeServico: template.nome,
@@ -166,10 +169,11 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
         criadoPor: usuarioLogado?.nome,
         descricao: `Solicitação criada via template: ${template.nome}`,
       });
-
       onClose();
     } catch (error: any) {
       void mostrarAlerta('Erro', error.message || 'Erro ao criar solicitação', 'erro');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -224,7 +228,8 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto relative">
+        <LoadingOverlay show={loading} text="Criando solicitação..." />
         <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-t-2xl sticky top-0 z-10">
           <div className="flex justify-between items-center">
             <div>

@@ -7,6 +7,7 @@ import { useSistema } from '@/app/context/SistemaContext';
 import { api } from '@/app/utils/api';
 import { formatarTamanhoParcela, formatarDataHora } from '@/app/utils/helpers';
 import ModalBase from './ModalBase';
+import LoadingOverlay from '../LoadingOverlay';
 
 interface ModalUploadDocumentoProps {
   processo?: Processo;
@@ -127,7 +128,8 @@ export default function ModalUploadDocumento({
 
   return (
     <ModalBase isOpen onClose={onClose} labelledBy="upload-title" dialogClassName="w-full max-w-2xl bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none max-h-[90vh] overflow-y-auto" zIndex={1020}>
-      <div className="rounded-2xl">
+      <div className="rounded-2xl relative">
+        <LoadingOverlay show={uploading} text="Enviando documento(s)..." />
         <div className="bg-gradient-to-r from-cyan-500 to-blue-600 p-6 rounded-t-2xl sticky top-0 z-10">
           <div className="flex items-center justify-between">
             <div>

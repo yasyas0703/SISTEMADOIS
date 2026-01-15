@@ -3,6 +3,7 @@
 import React from 'react';
 import { X, MessageSquare, Edit, User } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
+import LoadingOverlay from '../LoadingOverlay';
 import { Processo } from '@/app/types';
 
 interface ModalComentariosProps {
@@ -48,13 +49,15 @@ export default function ModalComentarios({
     return matches ? Array.from(new Set(matches.map((m) => m.trim()))) : [];
   };
 
-  const handleEnviar = () => {
+  const handleEnviar = async () => {
     if (!comentarioAtual.trim() || enviando) return;
     setEnviando(true);
     try {
       const mencoes = detectarMencoes(comentarioAtual);
-      adicionarComentarioProcesso(processoId, comentarioAtual.trim(), mencoes);
+      await adicionarComentarioProcesso(processoId, comentarioAtual.trim(), mencoes);
       setComentarioAtual('');
+    } catch (err) {
+      console.warn('Erro ao enviar comentário', err);
     } finally {
       setEnviando(false);
     }
@@ -119,7 +122,8 @@ export default function ModalComentarios({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col relative">
+        <LoadingOverlay show={enviando} text="Enviando comentário..." />
         <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-t-2xl flex-shrink-0">
           <div className="flex justify-between items-center">
             <div>
