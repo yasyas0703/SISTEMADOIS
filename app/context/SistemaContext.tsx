@@ -530,7 +530,45 @@ export function SistemaProvider({ children }: { children: React.ReactNode }) {
       try {
         const processosData = await api.getProcessos();
         if (!ativo) return;
-        setProcessos(processosData || []);
+        setProcessos((prev) => {
+          try {
+            const existingMap = new Map<number, any>();
+            (Array.isArray(prev) ? prev : []).forEach((p: any) => {
+              if (p && Number.isFinite(p.id)) existingMap.set(Number(p.id), p);
+            });
+
+            const merged: any[] = [];
+            (Array.isArray(processosData) ? processosData : []).forEach((p: any) => {
+              const id = Number(p?.id);
+              if (!Number.isFinite(id)) return;
+
+              const existing = existingMap.get(id);
+
+              // Preserve details (questionários/respostas/documentos) if already present in state
+              const existingHasDetails = existing && (
+                (Array.isArray(existing.questionarios) && existing.questionarios.length > 0) ||
+                (existing.questionariosPorDepartamento && Object.keys(existing.questionariosPorDepartamento).length > 0) ||
+                (existing.respostasHistorico && Object.keys(existing.respostasHistorico || {}).length > 0) ||
+                (Array.isArray(existing.documentos) && existing.documentos.length > 0)
+              );
+
+              if (existingHasDetails) {
+                merged.push(existing);
+              } else {
+                merged.push(p);
+              }
+
+              existingMap.delete(id);
+            });
+
+            // Append any leftover existing processes not present in the fetched list
+            for (const leftover of existingMap.values()) merged.push(leftover);
+
+            return merged;
+          } catch (err) {
+            return Array.isArray(processosData) ? processosData : [];
+          }
+        });
       } catch {
         // silencioso: se falhar momentaneamente, mantém estado atual
       }

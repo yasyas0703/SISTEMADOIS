@@ -51,8 +51,23 @@ export default function ModalQuestionarioProcesso({
 
   const modalContainerRef = React.useRef<HTMLDivElement | null>(null);
 
-  // DEBUG: log dos parâmetros e questionário
-  console.log('DEBUG ModalQuestionarioProcesso', { processoId, departamentoId, processo });
+  // DEBUG: log dos parâmetros e questionário (apenas em dev)
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('DEBUG ModalQuestionarioProcesso - params', { processoId, departamentoId });
+      console.debug('DEBUG ModalQuestionarioProcesso - processo summary', {
+        id: processo?.id,
+        nomeEmpresa: processo?.nomeEmpresa,
+        status: processo?.status,
+        questionariosKeys: processo ? Object.keys((processo as any).questionariosPorDepartamento || {}) : undefined,
+        questionariosLength: Array.isArray((processo as any)?.questionarios) ? (processo as any).questionarios.length : 0,
+        comentariosLength: Array.isArray((processo as any)?.comentarios) ? (processo as any).comentarios.length : 0,
+        documentosLength: Array.isArray((processo as any)?.documentos) ? (processo as any).documentos.length : 0,
+      });
+    }
+  } catch {
+    // noop
+  }
   // Priorizar questionariosPorDepartamento corretamente
   let questionarioAtual: Questionario[] = [];
   if (processo?.questionariosPorDepartamento && processo.questionariosPorDepartamento[String(departamentoId)]) {
@@ -93,6 +108,18 @@ export default function ModalQuestionarioProcesso({
         setCarregandoProcesso(true);
         const { api } = await import('@/app/utils/api');
         const atualizado = await api.getProcesso(processoId);
+        if (process.env.NODE_ENV !== 'production') {
+          try {
+            console.debug('DEBUG ModalQuestionarioProcesso - fetched processo', {
+              id: atualizado?.id,
+              questionariosLength: Array.isArray((atualizado as any)?.questionarios) ? (atualizado as any).questionarios.length : 0,
+              questionariosPorDepartamentoKeys: atualizado ? Object.keys((atualizado as any).questionariosPorDepartamento || {}) : [],
+              respostasHistoricoKeys: atualizado ? Object.keys((atualizado as any).respostasHistorico || {}) : [],
+            });
+          } catch {
+            // ignore
+          }
+        }
         if (cancelled) return;
 
         setProcessos((prev: any) => {

@@ -24,6 +24,16 @@ export default function ModalComentarios({
     mostrarConfirmacao,
   } = useSistema();
 
+  // DEBUG: mostrar comentários passados ao modal (apenas em dev)
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('DEBUG ModalComentarios - processoId', processoId);
+      console.debug('DEBUG ModalComentarios - comentarios do processo', processo?.comentarios || []);
+    }
+  } catch {
+    // noop
+  }
+
   const [comentarioAtual, setComentarioAtual] = React.useState('');
   const [editando, setEditando] = React.useState<number | null>(null);
   const [textoEditado, setTextoEditado] = React.useState('');
