@@ -94,12 +94,32 @@ export const useDocumentos = () => {
 
   const baixarDocumento = useCallback((documento: Documento) => {
     try {
-      const link = document.createElement('a');
-      link.href = documento.url;
-      link.download = documento.nome;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const doDownload = async () => {
+        let url = documento.url;
+        if (!url) {
+          try {
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            const headers: any = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const resp = await fetch(`/api/documentos/${documento.id}`, { method: 'GET', headers });
+            if (resp.ok) {
+              const data = await resp.json().catch(() => ({} as any));
+              url = data?.url;
+            }
+          } catch {
+            // fallback
+          }
+        }
+        if (!url) throw new Error('URL do documento indisponível');
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = documento.nome;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      void doDownload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao baixar documento');
       throw err;
@@ -107,14 +127,9 @@ export const useDocumentos = () => {
   }, []);
 
   const previewDocumento = useCallback((documento: Documento): string | null => {
-    // Para imagens, retornar a URL
-    if (documento.tipo.startsWith('image/')) {
-      return documento.url;
-    }
-
-    // Para PDFs, usar embed do PDF
-    if (documento.tipo === 'application/pdf') {
-      return documento.url;
+    // Para imagens/PDFs retornamos a URL (pode ser assinada pelo backend se necessário)
+    if (documento.tipo.startsWith('image/') || documento.tipo === 'application/pdf') {
+      return documento.url || null;
     }
 
     return null;

@@ -5,7 +5,7 @@ import { X, Upload, File, Trash2, Download } from 'lucide-react';
 import { Processo } from '@/app/types';
 import { useSistema } from '@/app/context/SistemaContext';
 import { api } from '@/app/utils/api';
-import { formatarTamanhoParcela, formatarDataHora } from '@/app/utils/helpers';
+import { formatarTamanhoParcela, formatarDataHora, formatarNomeArquivo } from '@/app/utils/helpers';
 import ModalBase from './ModalBase';
 import LoadingOverlay from '../LoadingOverlay';
 
@@ -22,9 +22,12 @@ export default function ModalUploadDocumento({
   perguntaLabel = null,
   onClose,
 }: ModalUploadDocumentoProps) {
-  const { adicionarDocumentoProcesso, adicionarNotificacao, mostrarAlerta, setProcessos } = useSistema();
+  const { adicionarDocumentoProcesso, adicionarNotificacao, mostrarAlerta, setProcessos, usuarios, usuarioLogado } = useSistema();
   const [uploading, setUploading] = React.useState(false);
   const [arquivos, setArquivos] = React.useState<Array<{ id: number; nome: string; tamanho: number; tipo: string; file: File }>>([]);
+  const [visibility, setVisibility] = React.useState<'PUBLIC' | 'ROLES' | 'USERS'>('PUBLIC');
+  const [selectedRoles, setSelectedRoles] = React.useState<string[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = React.useState<number[]>([]);
   const [arrastando, setArrastando] = React.useState(false);
 
   const [documentosLocal, setDocumentosLocal] = React.useState<any[]>(processo?.documentos || []);
@@ -47,7 +50,7 @@ export default function ModalUploadDocumento({
     }
 
     return documentos;
-  }, [documentos, perguntaId, processo?.departamentoAtual]);
+  }, [documentos, perguntaId, processo, processo?.departamentoAtual]);
 
   const handleArquivosSelecionados = (fileList: FileList | null) => {
     if (!fileList) return;
@@ -80,16 +83,41 @@ export default function ModalUploadDocumento({
     try {
       for (let i = 0; i < arquivos.length; i++) {
         const a = arquivos[i];
-        try {
-          await adicionarDocumentoProcesso(
-            processo.id,
-            a.file,
-            a.tipo,
-            processo.departamentoAtual,
-            perguntaId ?? undefined
-          );
-          sucessos++;
-        } catch (err: any) {
+          try {
+            if (process.env.NODE_ENV !== 'production') {
+              try { console.debug('ModalUploadDocumento - enviando', { processoId: processo.id, perguntaId, visibility, selectedRoles, selectedUserIds, fileName: a.nome }); } catch {}
+            }
+            const novo = await adicionarDocumentoProcesso(
+              processo.id,
+              a.file,
+              a.tipo,
+              processo.departamentoAtual,
+              perguntaId ?? undefined,
+              {
+                visibility,
+                allowedRoles: selectedRoles,
+                allowedUserIds: selectedUserIds,
+              }
+            );
+            if (process.env.NODE_ENV !== 'production') {
+              try { console.debug('ModalUploadDocumento - novoDocumento', novo); } catch {}
+            }
+            // Atualiza lista local imediatamente para feedback
+            try {
+              setDocumentosLocal(prev => {
+                const list = Array.isArray(prev) ? prev.slice() : [];
+                // evita duplicatas
+                if (!list.some((d: any) => Number(d.id) === Number(novo.id))) list.push(novo);
+                if (process.env.NODE_ENV !== 'production') {
+                  try { console.debug('ModalUploadDocumento - documentosLocal (após push)', list); } catch {}
+                }
+                return list;
+              });
+            } catch {
+              // noop
+            }
+            sucessos++;
+          } catch (err: any) {
           erros++;
           const msg = err instanceof Error ? err.message : String(err);
           if (msg && !mensagensErro.includes(msg)) mensagensErro.push(msg);
@@ -154,7 +182,7 @@ export default function ModalUploadDocumento({
   };
 
   return (
-    <ModalBase isOpen onClose={onClose} labelledBy="upload-title" dialogClassName="w-full max-w-2xl bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none max-h-[90vh] overflow-y-auto" zIndex={1020}>
+    <ModalBase isOpen onClose={onClose} labelledBy="upload-title" dialogClassName="w-full max-w-2xl bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none max-h-[90vh] overflow-y-auto" zIndex={1200}>
       <div className="rounded-2xl relative">
         <LoadingOverlay show={uploading} text="Enviando documento(s)..." />
         <div className="bg-gradient-to-r from-cyan-500 to-blue-600 p-6 rounded-t-2xl sticky top-0 z-10">
@@ -186,6 +214,51 @@ export default function ModalUploadDocumento({
               )}
             </div>
           )}
+
+          {/* Visibility controls */}
+          <div className="p-4 bg-gray-50 dark:bg-[var(--muted)] rounded-lg border border-gray-200 dark:border-[var(--border)]">
+            <h4 className="font-semibold mb-2">Visibilidade do Anexo</h4>
+            <div className="flex gap-3 mb-3">
+              <label className={`px-3 py-2 rounded-lg cursor-pointer ${visibility === 'PUBLIC' ? 'bg-cyan-600 text-white' : 'bg-white dark:bg-transparent border border-gray-200'}`}>
+                <input type="radio" name="visibility" value="PUBLIC" className="hidden" checked={visibility === 'PUBLIC'} onChange={() => setVisibility('PUBLIC')} /> Público
+              </label>
+              <label className={`px-3 py-2 rounded-lg cursor-pointer ${visibility === 'ROLES' ? 'bg-cyan-600 text-white' : 'bg-white dark:bg-transparent border border-gray-200'}`}>
+                <input type="radio" name="visibility" value="ROLES" className="hidden" checked={visibility === 'ROLES'} onChange={() => setVisibility('ROLES')} /> Apenas por Funções
+              </label>
+              <label className={`px-3 py-2 rounded-lg cursor-pointer ${visibility === 'USERS' ? 'bg-cyan-600 text-white' : 'bg-white dark:bg-transparent border border-gray-200'}`}>
+                <input type="radio" name="visibility" value="USERS" className="hidden" checked={visibility === 'USERS'} onChange={() => setVisibility('USERS')} /> Usuários Específicos
+              </label>
+            </div>
+
+            {visibility === 'ROLES' && (
+              <div className="flex gap-2 flex-wrap">
+                {['ADMIN', 'GERENTE', 'USUARIO'].map(r => (
+                  <label key={r} className={`px-3 py-2 rounded-lg cursor-pointer border ${selectedRoles.includes(r) ? 'bg-cyan-600 text-white' : 'bg-white dark:bg-transparent border-gray-200'}`}>
+                    <input type="checkbox" className="hidden" checked={selectedRoles.includes(r)} onChange={() => setSelectedRoles(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r])} />
+                    {r}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {visibility === 'USERS' && (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-600">Selecione quais usuários podem visualizar este anexo:</p>
+                <div className="max-h-40 overflow-auto border rounded p-2">
+                  {Array.isArray(usuarios) && usuarios.length > 0 ? (
+                    usuarios.map((u: any) => (
+                      <label key={u.id} className="flex items-center gap-2 p-1">
+                        <input type="checkbox" checked={selectedUserIds.includes(u.id)} onChange={() => setSelectedUserIds(prev => prev.includes(u.id) ? prev.filter(x => x !== u.id) : [...prev, u.id])} />
+                        <span className="text-sm">{u.nome} ({u.email})</span>
+                      </label>
+                    ))
+                  ) : (
+                    <div className="text-sm text-gray-500">Nenhum usuário disponível</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Área de Upload */}
           <div
@@ -220,7 +293,7 @@ export default function ModalUploadDocumento({
                     <div className="flex items-center gap-3">
                       <File size={20} className="text-gray-400 dark:text-gray-300" />
                       <div>
-                        <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">{a.nome}</p>
+                        <p className="font-medium text-gray-900 dark:text-gray-100 text-sm" title={a.nome}>{formatarNomeArquivo(a.nome)}</p>
                         <p className="text-xs text-gray-600 dark:text-gray-300">{formatarTamanhoParcela(Number(a.tamanho || 0))}</p>
                       </div>
                     </div>
@@ -247,10 +320,10 @@ export default function ModalUploadDocumento({
               <div className="space-y-2">
                 {documentosFiltrados.map((doc: any) => (
                   <div key={doc.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-[var(--border)] rounded-lg hover:bg-gray-50 dark:hover:bg-[var(--muted)] transition-colors">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
                       <File size={20} className="text-gray-400 dark:text-gray-300" />
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">{doc.nome}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate" title={doc.nome}>{formatarNomeArquivo(doc.nome)}</p>
                         <p className="text-xs text-gray-600 dark:text-gray-300">{formatarTamanhoParcela(Number(doc.tamanho || 0))} • {formatarDataHora(doc.dataUpload)}</p>
                       </div>
                     </div>

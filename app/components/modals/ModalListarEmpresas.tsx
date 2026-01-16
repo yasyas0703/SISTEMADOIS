@@ -32,7 +32,7 @@ function DetalhesDiretoModal({
         onClose={handleClose}
         labelledBy="detalhes-empresa-title"
         dialogClassName="w-full max-w-4xl bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none max-h-[90vh] overflow-y-auto m-4"
-        zIndex={1065}
+        zIndex={1225}
       >
         <div className="rounded-2xl">
           <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-t-2xl">
@@ -449,7 +449,7 @@ export default function ModalListarEmpresas({
           onClose={() => setEmpresaSelecionada(null)}
           labelledBy="detalhes-empresa-in-list-title"
           dialogClassName="w-full max-w-4xl bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl outline-none max-h-[90vh] overflow-y-auto m-4"
-          zIndex={1065}
+          zIndex={1225}
         >
           <div className="rounded-2xl">
             {/* Header Detalhes */}

@@ -81,6 +81,57 @@ export async function GET(
       return jsonBigInt({ error: 'Processo não encontrado' }, { status: 404 });
     }
 
+    // Filtrar documentos pelo nível de visibilidade para o usuário autenticado
+    const userId = Number((user as any).id);
+    const userRole = String((user as any).role || '').toUpperCase();
+    const documentoPodeSerVisto = (doc: any) => {
+      try {
+        const vis = String(doc.visibility || 'PUBLIC').toUpperCase();
+        const allowedRoles: string[] = Array.isArray(doc.allowedRoles) ? doc.allowedRoles.map(r => String(r).toUpperCase()) : [];
+        const allowedUserIds: number[] = Array.isArray(doc.allowedUserIds) ? doc.allowedUserIds.map((n: any) => Number(n)) : [];
+
+        if (vis === 'PUBLIC') return true;
+        if (vis === 'ROLES') {
+          if (allowedRoles.length === 0) return false;
+          return allowedRoles.includes(userRole);
+        }
+        if (vis === 'USERS') {
+          if (allowedUserIds.length === 0) return false;
+          return allowedUserIds.includes(userId);
+        }
+        // NONE or unknown: strict deny unless explicitly listed in allowedUserIds
+        return Array.isArray(allowedUserIds) && allowedUserIds.includes(userId);
+      } catch (e) {
+        return false;
+      }
+    };
+
+    // Montar mapa de contagem de anexos por perguntaId e por departamento (inclui total por pergunta)
+    try {
+      const allDocs = await prisma.documento.findMany({
+        where: { processoId: processo.id },
+        select: { id: true, perguntaId: true, departamentoId: true },
+      });
+      const documentosCounts: Record<string, number> = {};
+      for (const d of allDocs) {
+        // `allDocs` select retorna `perguntaId`/`departamentoId` (camelCase).
+        // Em alguns contextos os campos podem vir em snake_case; usamos cast a `any` para ser permissivo.
+        const pid = Number((d as any)?.perguntaId ?? (d as any)?.pergunta_id ?? 0) || 0;
+        const dept = Number((d as any)?.departamentoId ?? (d as any)?.departamento_id ?? 0) || 0;
+        const keySpecific = `${pid}:${dept}`;
+        const keyAny = `${pid}:0`;
+        documentosCounts[keySpecific] = (documentosCounts[keySpecific] || 0) + 1;
+        documentosCounts[keyAny] = (documentosCounts[keyAny] || 0) + 1;
+      }
+      (processo as any).documentosCounts = documentosCounts;
+    } catch (e) {
+      // não bloquear a resposta caso a consulta falhe; apenas seguir sem contagens
+      (processo as any).documentosCounts = {};
+    }
+    if (Array.isArray((processo as any).documentos)) {
+      (processo as any).documentos = (processo as any).documentos.filter((d: any) => documentoPodeSerVisto(d));
+    }
+
     // Buscar todos os questionários por departamento vinculados a este processo
     const questionariosPorDepartamento = await prisma.questionarioDepartamento.findMany({
       where: {

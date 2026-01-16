@@ -100,6 +100,36 @@ export async function GET(request: NextRequest) {
       orderBy: { dataCriacao: 'desc' },
     });
 
+    // Filtrar documentos por visibilidade para o usuário autenticado
+    const userId = Number((user as any).id);
+    const userRole = String((user as any).role || '').toUpperCase();
+    const documentoPodeSerVisto = (doc: any) => {
+      try {
+        const vis = String(doc.visibility || 'PUBLIC').toUpperCase();
+        const allowedRoles: string[] = Array.isArray(doc.allowedRoles) ? doc.allowedRoles.map(r => String(r).toUpperCase()) : [];
+        const allowedUserIds: number[] = Array.isArray(doc.allowedUserIds) ? doc.allowedUserIds.map((n: any) => Number(n)) : [];
+
+        if (vis === 'PUBLIC') return true;
+        if (vis === 'ROLES') {
+          if (allowedRoles.length === 0) return false;
+          return allowedRoles.includes(userRole);
+        }
+        if (vis === 'USERS') {
+          if (allowedUserIds.length === 0) return false;
+          return allowedUserIds.includes(userId);
+        }
+        return Array.isArray(allowedUserIds) && allowedUserIds.includes(userId);
+      } catch (e) {
+        return false;
+      }
+    };
+
+    for (const p of processos) {
+      if (Array.isArray((p as any).documentos)) {
+        (p as any).documentos = (p as any).documentos.filter((d: any) => documentoPodeSerVisto(d));
+      }
+    }
+
     // NextResponse.json usa JSON.stringify internamente e quebra com BigInt.
     // Replacer garante serialização segura (ex.: documentos.tamanho, historicoEventos.dataTimestamp).
     const body = JSON.stringify(processos, (_key, value) =>

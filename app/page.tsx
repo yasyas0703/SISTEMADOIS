@@ -370,6 +370,7 @@ export default function Home() {
           onTags={(processo) => setShowSelecionarTags(processo)}
           onGerenciarTags={() => setShowGerenciarTags(true)}
           onAvancar={(processo) => avancarParaProximoDepartamento(processo.id)}
+          onVoltar={(processo) => voltarParaDepartamentoAnterior(processo.id)}
           onFinalizar={(processo) => finalizarProcesso(processo.id)}
           onExcluir={(processo) => {
             void (async () => {
@@ -483,6 +484,7 @@ export default function Home() {
           processoId={showQuestionario.processoId}
           departamentoId={showQuestionario.departamento}
           somenteLeitura={showQuestionario.somenteLeitura || false}
+          allowEditFinalizado={showQuestionario.allowEditFinalizado || false}
           onClose={() => setShowQuestionario(null)}
         />
       )}
@@ -532,6 +534,10 @@ export default function Home() {
               avancarParaProximoDepartamento(showProcessoDetalhado.id);
               setShowProcessoDetalhado(null);
             }}
+              onVoltar={() => {
+                voltarParaDepartamentoAnterior(showProcessoDetalhado.id);
+                setShowProcessoDetalhado(null);
+              }}
             onFinalizar={() => {
               finalizarProcesso(showProcessoDetalhado.id);
               setShowProcessoDetalhado(null);

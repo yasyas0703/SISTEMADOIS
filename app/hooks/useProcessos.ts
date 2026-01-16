@@ -45,7 +45,7 @@ export const useProcessos = () => {
         }]
       });
       
-      setProcessos([...processos, novoProcesso]);
+      setProcessos(prev => [...prev, novoProcesso]);
       return novoProcesso;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar processo');
@@ -53,17 +53,14 @@ export const useProcessos = () => {
     } finally {
       setLoading(false);
     }
-  }, [processos, setProcessos]);
+  }, [setProcessos]);
 
   const atualizarProcesso = useCallback(async (id: number, dados: Partial<Processo>) => {
     setLoading(true);
     setError(null);
     try {
       const processoAtualizado = await api.atualizarProcesso(id, dados);
-      
-      setProcessos(
-        processos.map(p => p.id === id ? processoAtualizado : p)
-      );
+      setProcessos(prev => prev.map(p => p.id === id ? processoAtualizado : p));
       return processoAtualizado;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao atualizar processo');
@@ -71,7 +68,7 @@ export const useProcessos = () => {
     } finally {
       setLoading(false);
     }
-  }, [processos, setProcessos]);
+  }, [setProcessos]);
 
   const excluirProcesso = useCallback(async (id: number) => {
     setLoading(true);
@@ -85,7 +82,7 @@ export const useProcessos = () => {
     } finally {
       setLoading(false);
     }
-  }, [processos, setProcessos]);
+  }, []);
 
   const avancarParaProximoDepartamento = useCallback(async (processoId: number) => {
     try {
@@ -141,7 +138,7 @@ export const useProcessos = () => {
       setError(err instanceof Error ? err.message : 'Erro ao avançar processo');
       throw err;
     }
-  }, [processos, atualizarProcesso, departamentos]);
+  }, [atualizarProcesso, departamentos]);
 
   const finalizarProcesso = useCallback(async (processoId: number) => {
     setLoading(true);
@@ -172,7 +169,7 @@ export const useProcessos = () => {
     } finally {
       setLoading(false);
     }
-  }, [processos, atualizarProcesso, departamentos]);
+  }, [atualizarProcesso, departamentos]);
 
   return {
     processos,

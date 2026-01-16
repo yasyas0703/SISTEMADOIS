@@ -6,12 +6,13 @@ import * as LucideIcons from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import LoadingOverlay from '../LoadingOverlay';
 import { Questionario } from '@/app/types';
-import { formatarDataHora, formatarTamanhoParcela } from '@/app/utils/helpers';
+import { formatarDataHora, formatarTamanhoParcela, formatarNomeArquivo } from '@/app/utils/helpers';
 
 interface ModalQuestionarioProcessoProps {
   processoId: number;
   departamentoId: number;
   somenteLeitura?: boolean;
+  allowEditFinalizado?: boolean;
   onClose: () => void;
 }
 
@@ -19,6 +20,7 @@ export default function ModalQuestionarioProcesso({
   processoId,
   departamentoId,
   somenteLeitura = false,
+  allowEditFinalizado = false,
   onClose,
 }: ModalQuestionarioProcessoProps) {
   const {
@@ -47,6 +49,8 @@ export default function ModalQuestionarioProcesso({
     }
     return null;
   };
+
+
 
   const [carregandoProcesso, setCarregandoProcesso] = React.useState(false);
   const [salvandoRespostas, setSalvandoRespostas] = React.useState(false);
@@ -178,12 +182,22 @@ export default function ModalQuestionarioProcesso({
 
   const docsAnexadosPergunta = (perguntaId: number) => {
     const docs = processo?.documentos || [];
-    return docs.filter((d: any) => Number(d.perguntaId) === Number(perguntaId));
+    const filtered = docs.filter((d: any) => {
+      const dPerg = Number(d?.perguntaId ?? d?.pergunta_id);
+      if (!Number.isFinite(dPerg)) return false;
+      return dPerg === Number(perguntaId);
+    });
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        console.debug('docsAnexadosPergunta - filtro', { processoId: processo?.id, perguntaId, totalDocs: (processo?.documentos || []).length, filteredCount: filtered.length, filteredIds: filtered.map((x: any) => x.id), sample: filtered.slice(0, 5) });
+      } catch {}
+    }
+    return filtered;
   };
 
   const docsAnexadosPerguntaNoDepartamento = (deptId: number, perguntaId: number) => {
     const docs = processo?.documentos || [];
-    return docs.filter((d: any) => {
+    const filtered = docs.filter((d: any) => {
       const dPerg = Number(d?.perguntaId ?? d?.pergunta_id);
       if (dPerg !== Number(perguntaId)) return false;
 
@@ -193,6 +207,12 @@ export default function ModalQuestionarioProcesso({
       if (!Number.isFinite(dDept)) return true;
       return dDept === Number(deptId);
     });
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        console.debug('docsAnexadosPerguntaNoDepartamento - filtro', { processoId: processo?.id, deptId, perguntaId, filteredCount: filtered.length, filteredIds: filtered.map((x: any) => x.id) });
+      } catch {}
+    }
+    return filtered;
   };
 
   const avaliarCondicao = (pergunta: Questionario, respostasAtuais: Record<string, any>) => {
@@ -222,7 +242,14 @@ export default function ModalQuestionarioProcesso({
     const faltando = obrigatorias.filter((p) => {
       if (!avaliarCondicao(p, respostas)) return false;
       if (p.tipo === 'file') {
-        return docsAnexadosPergunta(p.id).length === 0;
+        // Se existem anexos visíveis, considera respondido
+        if (docsAnexadosPergunta(p.id).length > 0) return false;
+        // Caso contrário, verificar contagens retornadas pelo backend (ex.: anexos restritos)
+        const counts: Record<string, number> = (processo as any)?.documentosCounts ?? {};
+        const keySpecific = `${p.id}:${departamentoId}`;
+        const keyAny = `${p.id}:0`;
+        const total = Number(counts[keySpecific] ?? counts[keyAny] ?? 0);
+        return total === 0;
       }
       const r = respostas[keyOf(p)];
       if (r === null || r === undefined) return true;
@@ -252,9 +279,26 @@ export default function ModalQuestionarioProcesso({
 
       if (!ok) return;
 
-      atualizarProcesso(processoId, {
-        documentos: (processo.documentos || []).filter((d: any) => d.id !== documentoId),
-      } as any);
+      try {
+        const { api } = await import('@/app/utils/api');
+        await api.excluirDocumento(documentoId);
+
+        // Recarrega o processo atualizado do servidor e atualiza o estado global
+        try {
+          const processoAtualizado = await api.getProcesso(processoId);
+          setProcessos((prev: any) => (Array.isArray(prev) ? prev.map((p: any) => (p?.id === processoId ? processoAtualizado : p)) : prev));
+        } catch (err) {
+          // Se falhar ao recarregar, atualizamos localmente como fallback
+          atualizarProcesso(processoId, {
+            documentos: (processo.documentos || []).filter((d: any) => d.id !== documentoId),
+          } as any);
+        }
+
+        adicionarNotificacao('Documento excluído com sucesso', 'sucesso');
+      } catch (err: any) {
+        const msg = err instanceof Error ? err.message : 'Erro ao excluir documento';
+        await mostrarAlerta('Erro', msg, 'erro');
+      }
     })();
   };
 
@@ -281,17 +325,23 @@ export default function ModalQuestionarioProcesso({
 
   const handleSalvar = async () => {
     if (!processo || !departamento) return;
-    if (somenteLeitura || processo.status === 'finalizado') return;
+    if (somenteLeitura || (processo.status === 'finalizado' && !allowEditFinalizado)) return;
     if (!validarObrigatorios()) return;
 
     try {
       setSalvandoRespostas(true);
+      if (process.env.NODE_ENV !== 'production') {
+        try { console.debug('ModalQuestionarioProcesso - handleSalvar - iniciando', { processoId, departamentoId, respostasCount: Object.keys(respostas || {}).length, respostasSample: Object.fromEntries(Object.entries(respostas || {}).slice(0,10)) }); } catch {}
+      }
       // Salvar respostas usando a API de questionários
       const { api } = await import('@/app/utils/api');
       await api.salvarRespostasQuestionario(processoId, departamentoId, respostas);
 
       // Recarregar o processo atualizado
       const processoAtualizado = await api.getProcesso(processoId);
+      if (process.env.NODE_ENV !== 'production') {
+        try { console.debug('ModalQuestionarioProcesso - handleSalvar - processoAtualizado', { id: processoAtualizado?.id, documentosLen: Array.isArray(processoAtualizado?.documentos) ? processoAtualizado.documentos.length : 0, documentosSample: (processoAtualizado?.documentos || []).slice(0,5).map((d:any)=>({ id: d.id, perguntaId: d.perguntaId ?? d.pergunta_id, departamentoId: d.departamentoId ?? d.departamento_id })) }); } catch {}
+      }
       if (processoAtualizado && setProcessos) {
         setProcessos((prev: any) => prev.map((p: any) => p.id === processoId ? processoAtualizado : p));
       }
@@ -309,7 +359,7 @@ export default function ModalQuestionarioProcesso({
 
   const handleFecharModal = () => {
     void (async () => {
-      if (!somenteLeitura && processo?.status !== 'finalizado' && temMudancasNaoSalvas()) {
+      if (!somenteLeitura && (processo?.status !== 'finalizado' || allowEditFinalizado) && temMudancasNaoSalvas()) {
         const confirmouSalvar = await mostrarConfirmacao({
           titulo: 'Alterações não salvas',
           mensagem: 'Você tem alterações não salvas. Deseja salvar antes de fechar?',
@@ -330,7 +380,15 @@ export default function ModalQuestionarioProcesso({
   };
 
   const renderCampo = (pergunta: Questionario) => {
-    const bloqueado = somenteLeitura || processo?.status === 'finalizado';
+    const bloqueado = (() => {
+      if (somenteLeitura) return true;
+      if (processo?.status !== 'finalizado') return false;
+      const role = String(usuarioLogado?.role || '').toUpperCase();
+      const isSameDept = Number(usuarioLogado?.departamentoId) === Number(departamentoId);
+      if (allowEditFinalizado) return false;
+      if (role === 'ADMIN' || role === 'GERENTE' || isSameDept) return false;
+      return true;
+    })();
     const k = keyOf(pergunta);
     const valor = respostas[k];
     const isEmpty = valor === undefined || valor === null || valor === '';
@@ -435,6 +493,9 @@ export default function ModalQuestionarioProcesso({
 
       case 'file': {
         const docsAnexados = docsAnexadosPergunta(pergunta.id);
+        if (process.env.NODE_ENV !== 'production') {
+          try { console.debug('ModalQuestionarioProcesso - campo file - docsAnexados', { perguntaId: pergunta.id, count: docsAnexados.length, ids: docsAnexados.map((d:any)=>d.id) }); } catch {}
+        }
         return (
           <div className="space-y-3">
             <div className="space-y-2">
@@ -458,7 +519,7 @@ export default function ModalQuestionarioProcesso({
                   {docsAnexados.map((doc: any) => (
                     <div
                       key={doc.id}
-                      className="bg-blue-50 border border-blue-200 dark:bg-blue-500/10 dark:border-[var(--border)] rounded-xl p-3 hover:shadow-md transition-all"
+                      className="relative bg-blue-50 border border-blue-200 dark:bg-blue-500/10 dark:border-[var(--border)] rounded-xl p-3 hover:shadow-md transition-all pr-20"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -466,12 +527,12 @@ export default function ModalQuestionarioProcesso({
                             <FileText size={20} className="text-blue-600" />
                           </div>
 
-                          <div className="flex-1 min-w-0">
+                          <div className="flex-1 min-w-0 overflow-hidden">
                             <div
-                              className="text-sm font-semibold text-gray-900 dark:text-[var(--fg)] truncate"
+                              className="text-sm font-semibold text-gray-900 dark:text-[var(--fg)] truncate max-w-[calc(100%-96px)]"
                               title={doc.nome}
                             >
-                              {doc.nome}
+                              {formatarNomeArquivo(doc.nome)}
                             </div>
                             <div className="flex items-center gap-3 text-xs text-blue-500 mt-1">
                               <span>{formatarTamanhoParcela(Number(doc.tamanho || 0))}</span>
@@ -480,7 +541,7 @@ export default function ModalQuestionarioProcesso({
                           </div>
                         </div>
 
-                        <div className="flex gap-2 flex-shrink-0 ml-3">
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex gap-2">
                           <button
                             type="button"
                             onClick={() => visualizarDocumento(doc)}
@@ -612,15 +673,29 @@ export default function ModalQuestionarioProcesso({
       : [];
 
     const idxNoFluxo = fluxoIds.findIndex((id) => id === Number(departamentoId));
-    const deptIdsAnteriores = idxNoFluxo >= 0 ? fluxoIds.slice(0, idxNoFluxo) : [];
 
-    const deptIdsFallback = Object.keys(processo.respostasHistorico || {})
-      .map((k) => Number(k))
-      .filter((id) => Number.isFinite(id) && id !== Number(departamentoId));
+    let deptIds: number[] = [];
+    if (idxNoFluxo >= 0) {
+      // departamentos anteriores no fluxo (ordem definida)
+      deptIds = fluxoIds.slice(0, idxNoFluxo);
+    } else {
+      // sem informação de fluxo clara: derive apenas departamentos anteriores
+      // usando a ordem presente em `departamentos` (fallback seguro)
+      const allHistoric = Object.keys(processo.respostasHistorico || {})
+        .map((k) => Number(k))
+        .filter((id) => Number.isFinite(id) && id !== Number(departamentoId));
 
-    const deptIds = (deptIdsAnteriores.length ? deptIdsAnteriores : deptIdsFallback).filter(
-      (id, pos, arr) => arr.indexOf(id) === pos
-    );
+      const idxByDeptList = departamentos.findIndex((d) => Number(d?.id) === Number(departamentoId));
+      if (idxByDeptList >= 0) {
+        const earlierDeptIds = departamentos.slice(0, idxByDeptList).map((d) => Number(d.id));
+        deptIds = allHistoric.filter((id) => earlierDeptIds.includes(id));
+      } else {
+        deptIds = [];
+      }
+    }
+
+    // remover duplicatas
+    deptIds = deptIds.filter((id, pos, arr) => arr.indexOf(id) === pos);
 
     deptIds.forEach((deptIdNum) => {
       if (deptIdNum === Number(departamentoId)) return;
@@ -666,7 +741,7 @@ export default function ModalQuestionarioProcesso({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[1100] p-4">
       {Object.keys(respostas || {}).length > 0 && (
         <div className="fixed bottom-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-[9999]">
           <div className="flex items-center gap-2">
@@ -778,16 +853,16 @@ export default function ModalQuestionarioProcesso({
                         {docsDept.map((doc: any) => (
                           <div
                             key={doc.id}
-                            className="flex items-center justify-between bg-white dark:bg-[var(--card)] border border-blue-100 dark:border-[var(--border)] rounded-lg p-3"
+                            className="relative flex items-center justify-between bg-white dark:bg-[var(--card)] border border-blue-100 dark:border-[var(--border)] rounded-lg p-3 pr-20"
                           >
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <FileText size={20} className="text-blue-600 flex-shrink-0" />
                               <div className="min-w-0">
-                                <div className="font-medium text-sm text-gray-900 truncate">{doc.nome}</div>
+                                <div className="font-medium text-sm text-gray-900 truncate max-w-[calc(100%-96px)]" title={doc.nome}>{formatarNomeArquivo(doc.nome)}</div>
                                 <div className="text-xs text-gray-500">{formatarDataHora(doc.dataUpload)}</div>
                               </div>
                             </div>
-                            <div className="flex gap-2 flex-shrink-0">
+                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex gap-2">
                               <button
                                 type="button"
                                 onClick={() => visualizarDocumento(doc)}
@@ -895,49 +970,65 @@ export default function ModalQuestionarioProcesso({
                                   {pergunta.tipo === 'file' ? (
                                     <div className="space-y-2">
                                       {(() => {
-                                        const docs = docsAnexadosPerguntaNoDepartamento(Number(deptId), pergunta.id);
-                                        return docs.length > 0 ? (
-                                          docs.map((doc: any) => (
-                                            <div
-                                              key={doc.id}
-                                              className="flex items-center justify-between bg-blue-50 border border-blue-200 dark:bg-blue-500/10 dark:border-[var(--border)] rounded-lg p-3"
-                                            >
-                                              <div className="flex items-center gap-3 flex-1">
-                                                <FileText size={20} className="text-blue-600" />
-                                                <div className="flex-1 min-w-0">
-                                                  <div className="font-medium text-sm text-gray-900 truncate">
-                                                    {doc.nome}
+                                            const docs = docsAnexadosPerguntaNoDepartamento(Number(deptId), pergunta.id);
+                                            if (docs.length > 0) {
+                                              return docs.map((doc: any) => (
+                                                <div
+                                                  key={doc.id}
+                                                  className="relative flex items-center justify-between bg-blue-50 border border-blue-200 dark:bg-blue-500/10 dark:border-[var(--border)] rounded-lg p-3 w-full overflow-hidden pr-20"
+                                                >
+                                                  <div className="flex items-center gap-3 flex-1">
+                                                    <FileText size={20} className="text-blue-600" />
+                                                    <div className="flex-1 min-w-0">
+                                                      <div className="font-medium text-sm text-gray-900 truncate max-w-[calc(100%-96px)]" title={doc.nome}>
+                                                          {formatarNomeArquivo(doc.nome)}
+                                                        </div>
+                                                      <div className="text-xs text-gray-500">
+                                                        {formatarTamanhoParcela(Number(doc.tamanho || 0))}
+                                                      </div>
+                                                    </div>
                                                   </div>
-                                                  <div className="text-xs text-gray-500">
-                                                    {formatarTamanhoParcela(Number(doc.tamanho || 0))}
+                                                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex gap-2">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => visualizarDocumento(doc)}
+                                                      className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg"
+                                                      title="Visualizar"
+                                                    >
+                                                      <Eye size={16} />
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => baixarDocumento(doc)}
+                                                      className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                                                      title="Baixar"
+                                                    >
+                                                      <Download size={16} />
+                                                    </button>
                                                   </div>
                                                 </div>
+                                              ));
+                                            }
+
+                                            // Se não há anexos visíveis, verificar se existem anexos restritos no backend
+                                            const counts: Record<string, number> = (processo as any)?.documentosCounts ?? {};
+                                            const keySpecific = `${pergunta.id}:${deptId}`;
+                                            const keyAny = `${pergunta.id}:0`;
+                                            const total = Number(counts[keySpecific] ?? counts[keyAny] ?? 0);
+                                            if (total > 0) {
+                                              return (
+                                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center text-sm text-gray-700 flex items-center justify-center gap-2">
+                                                  <CheckCircle size={16} className="text-green-500" />
+                                                  <span>Respondido — anexo enviado (sem permissão para visualizar)</span>
+                                                </div>
+                                              );
+                                            }
+
+                                            return (
+                                              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center text-sm text-gray-500">
+                                                Nenhum arquivo anexado
                                               </div>
-                                              <div className="flex gap-2">
-                                                <button
-                                                  type="button"
-                                                  onClick={() => visualizarDocumento(doc)}
-                                                  className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg"
-                                                  title="Visualizar"
-                                                >
-                                                  <Eye size={16} />
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => baixarDocumento(doc)}
-                                                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-                                                  title="Baixar"
-                                                >
-                                                  <Download size={16} />
-                                                </button>
-                                              </div>
-                                            </div>
-                                          ))
-                                        ) : (
-                                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center text-sm text-gray-500">
-                                            Nenhum arquivo anexado
-                                          </div>
-                                        );
+                                            );
                                       })()}
                                     </div>
                                   ) : resposta === undefined || resposta === null || String(resposta).trim() === '' ? (
@@ -1119,7 +1210,7 @@ export default function ModalQuestionarioProcesso({
               Fechar
             </button>
 
-            {!somenteLeitura && processo?.status !== 'finalizado' && (
+            {!somenteLeitura && (processo?.status !== 'finalizado' || allowEditFinalizado) && (
               <button
                 type="submit"
                 disabled={salvandoRespostas}
@@ -1131,7 +1222,7 @@ export default function ModalQuestionarioProcesso({
             )}
 
             {/* Botão Editar Quest. */}
-            {!somenteLeitura && processo?.status !== 'finalizado' && setShowQuestionarioSolicitacao && (
+            {!somenteLeitura && (processo?.status !== 'finalizado' || allowEditFinalizado) && setShowQuestionarioSolicitacao && (
               <button
                 type="button"
                 onClick={() => {

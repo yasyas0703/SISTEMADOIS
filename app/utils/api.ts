@@ -458,6 +458,22 @@ export const api = {
     }
   },
 
+  voltarProcesso: async (id: number) => {
+    try {
+      const response = await fetchAutenticado(`${API_URL}/processos/${id}/voltar`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response));
+      }
+      const data = await response.json();
+      return normalizeProcesso(data);
+    } catch (error) {
+      console.error('Erro ao voltar processo:', error);
+      throw error;
+    }
+  },
+
   salvarProcesso: async (processo: any) => {
     try {
       const payload = { ...processo };
@@ -610,7 +626,7 @@ export const api = {
     }
   },
 
-  uploadDocumento: async (processoId: number, arquivo: File, tipo: string, perguntaId?: number, departamentoId?: number) => {
+  uploadDocumento: async (processoId: number, arquivo: File, tipo: string, perguntaId?: number, departamentoId?: number, meta?: { visibility?: string; allowedRoles?: string[]; allowedUserIds?: number[] }) => {
     try {
       const formData = new FormData();
       formData.append('arquivo', arquivo);
@@ -618,6 +634,9 @@ export const api = {
       formData.append('processoId', String(processoId));
       if (perguntaId) formData.append('perguntaId', String(perguntaId));
       if (departamentoId) formData.append('departamentoId', String(departamentoId));
+      if (meta?.visibility) formData.append('visibility', String(meta.visibility));
+      if (Array.isArray(meta?.allowedRoles) && meta!.allowedRoles!.length > 0) formData.append('allowedRoles', meta!.allowedRoles!.join(','));
+      if (Array.isArray(meta?.allowedUserIds) && meta!.allowedUserIds!.length > 0) formData.append('allowedUserIds', meta!.allowedUserIds!.map(String).join(','));
 
       const response = await fetchAutenticado(`${API_URL}/documentos`, {
         method: 'POST',

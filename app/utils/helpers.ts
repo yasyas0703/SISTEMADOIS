@@ -150,6 +150,19 @@ export const formatarTamanhoParcela = (bytes: number): string => {
 };
 
 /**
+ * Formata/encurta nomes de arquivos para exibição mantendo a extensão.
+ */
+export const formatarNomeArquivo = (nome?: string | null, maxLen = 48): string => {
+  if (!nome) return '';
+  const raw = String(nome);
+  if (raw.length <= maxLen) return raw;
+  const lastDot = raw.lastIndexOf('.');
+  const ext = lastDot > 0 ? raw.slice(lastDot) : '';
+  const keep = Math.max(6, maxLen - (ext.length + 3));
+  return `${raw.slice(0, keep)}...${ext}`;
+};
+
+/**
  * Valida um email
  */
 export const validarEmail = (email: string): boolean => {

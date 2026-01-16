@@ -116,7 +116,8 @@ interface SistemaContextType {
   setGlobalLoading: (v: boolean) => void;
   aplicarTagsProcesso: (processoId: number, tags: number[]) => Promise<void>;
   adicionarComentarioProcesso: (processoId: number, texto: string, mencoes?: string[]) => Promise<void>;
-  adicionarDocumentoProcesso: (processoId: number, arquivo: File, tipo: string, departamentoId?: number, perguntaId?: number) => Promise<any>;
+  voltarParaDepartamentoAnterior: (processoId: number) => Promise<void>;
+  adicionarDocumentoProcesso: (processoId: number, arquivo: File, tipo: string, departamentoId?: number, perguntaId?: number, meta?: { visibility?: string; allowedRoles?: string[]; allowedUserIds?: number[] }) => Promise<any>;
   inicializandoUsuario: boolean;
 }
 
@@ -296,6 +297,16 @@ export function SistemaProvider({ children }: { children: React.ReactNode }) {
     notificacoesRef.current = notificacoes;
   }, [notificacoes]);
 
+  // DEBUG: expõe `processos` no window para inspeção rápida durante desenvolvimento
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        (window as any).__SISTEMA_PROCESSOS = processos;
+        console.debug('SistemaContext - processos expostos em window.__SISTEMA_PROCESSOS (dev) - total:', Array.isArray(processos) ? processos.length : 0);
+      } catch {}
+    }
+  }, [processos]);
+
   const removerNotificacao = useCallback((id: number) => {
     const notif = notificacoes.find(n => n.id === id);
 
@@ -470,8 +481,9 @@ export function SistemaProvider({ children }: { children: React.ReactNode }) {
           }
         })();
 
-        // Admin: usuários também em background
-        if (usuarioLogado && usuarioLogado.role === 'admin') {
+        // Carrega lista de usuários em background para perfis que gerenciam anexos
+        // (antes era somente `admin` — agora também carregamos para `gerente`)
+        if (usuarioLogado && (usuarioLogado.role === 'admin' || usuarioLogado.role === 'gerente')) {
           void (async () => {
             const usuariosRes = await Promise.allSettled([api.getUsuarios()]);
             if (cancelled) return;
@@ -1128,7 +1140,7 @@ useEffect(() => {
         throw error;
       }
     },
-    [departamentos, adicionarNotificacao]
+    [departamentos, adicionarNotificacao, usuarioLogado]
   );
 
   const excluirProcesso = useCallback(async (processoId: number) => {
@@ -1179,7 +1191,7 @@ useEffect(() => {
             .filter((p: any) => {
               if (!avaliarCondicaoLocal(p, respostasSalvas)) return false;
               if (p.tipo === 'file') {
-                const anexos = docs.filter((d: any) => {
+                const anexosVisiveis = docs.filter((d: any) => {
                   const dPerg = Number(d?.perguntaId ?? d?.pergunta_id);
                   if (dPerg !== Number(p.id)) return false;
                   const dDeptRaw = d?.departamentoId ?? d?.departamento_id;
@@ -1187,7 +1199,16 @@ useEffect(() => {
                   if (!Number.isFinite(dDept)) return true;
                   return dDept === deptId;
                 });
-                return anexos.length === 0;
+                // Se houver anexos visíveis para o usuário, não está faltando
+                if (anexosVisiveis.length > 0) return false;
+
+                // Caso contrário, consultar o mapa de contagens retornado pelo backend
+                const counts: Record<string, number> = (processoDados as any)?.documentosCounts ?? {};
+                const keySpecific = `${Number(p.id)}:${Number(deptId)}`;
+                const keyAny = `${Number(p.id)}:0`;
+                const total = Number(counts[keySpecific] ?? counts[keyAny] ?? 0);
+                // Se existe pelo menos um anexo (mesmo que restrito), considera como respondido
+                return total === 0;
               }
               const r = respostasSalvas[String(p.id)];
               if (r === null || r === undefined) return true;
@@ -1227,7 +1248,7 @@ useEffect(() => {
         setGlobalLoading(false);
       }
     },
-    [adicionarNotificacao]
+    [adicionarNotificacao, mostrarAlerta, processos, setProcessos, setGlobalLoading]
   );
 
   const finalizarProcesso = useCallback(async (processoId: number) => {
@@ -1305,7 +1326,29 @@ useEffect(() => {
     [processos, adicionarNotificacao]
   );
 
-  const adicionarDocumentoProcesso = useCallback(async (processoId: number, arquivo: File, tipo: string, departamentoId?: number, perguntaId?: number) => {
+  const voltarParaDepartamentoAnterior = useCallback(async (processoId: number) => {
+    try {
+      const processo = processos.find(p => p.id === processoId);
+      const confirmado = await mostrarConfirmacao({
+        titulo: 'Confirmar retorno',
+        mensagem: 'Deseja realmente retornar este processo ao departamento anterior para permitir edições?',
+        tipo: 'aviso',
+        textoConfirmar: 'Sim, retornar',
+        textoCancelar: 'Cancelar',
+      });
+      if (!confirmado) return;
+
+      await api.voltarProcesso(processoId);
+      const processoAtualizado = await api.getProcesso(processoId);
+      setProcessos(prev => prev.map(p => p.id === processoId ? processoAtualizado : p));
+      adicionarNotificacao('Processo retornado ao departamento anterior', 'sucesso');
+    } catch (error: any) {
+      adicionarNotificacao(error.message || 'Erro ao retornar processo', 'erro');
+      throw error;
+    }
+  }, [processos, adicionarNotificacao, mostrarConfirmacao]);
+
+  const adicionarDocumentoProcesso = useCallback(async (processoId: number, arquivo: File, tipo: string, departamentoId?: number, perguntaId?: number, meta?: { visibility?: string; allowedRoles?: string[]; allowedUserIds?: number[] }) => {
     try {
       const processo = processos.find(p => p.id === processoId);
       const novoDocumento = await api.uploadDocumento(
@@ -1313,13 +1356,51 @@ useEffect(() => {
         arquivo,
         tipo,
         perguntaId,
-        departamentoId || processo?.departamentoAtual
+        departamentoId || processo?.departamentoAtual,
+        meta
       );
+      if (process.env.NODE_ENV !== 'production') {
+        try {
+          console.debug('adicionarDocumentoProcesso - params', { processoId, departamentoId, perguntaId, meta });
+          console.debug('adicionarDocumentoProcesso - novoDocumento', novoDocumento);
+          try { console.debug('adicionarDocumentoProcesso - novoDocumento keys', { keys: Object.keys(novoDocumento || {}), perguntaId: novoDocumento?.perguntaId ?? novoDocumento?.pergunta_id, departamentoId: novoDocumento?.departamentoId ?? novoDocumento?.departamento_id, id: novoDocumento?.id }); } catch {}
+        } catch {}
+      }
 
-      // Recarrega o processo atualizado
-      const processoAtualizado = await api.getProcesso(processoId);
-      setProcessos(prev => prev.map(p => p.id === processoId ? processoAtualizado : p));
-      
+      // Aplicar atualização otimista: inserir o novo documento no processo em memória
+      setProcessos(prev => {
+        const list = Array.isArray(prev) ? prev : [];
+        return list.map(p => {
+          if (p.id !== processoId) return p;
+          const docs = Array.isArray(p.documentos) ? p.documentos.slice() : [];
+          // prevenir duplicatas caso o backend já tenha retornado o doc
+          const exists = docs.some((d: any) => Number(d.id) === Number(novoDocumento.id));
+          if (!exists) docs.push(novoDocumento);
+          return { ...p, documentos: docs } as any;
+        });
+      });
+
+      // Tenta reconciliar com o backend (eventual consistency). Faz algumas tentativas antes de desistir.
+      (async () => {
+        const maxAttempts = 5;
+        const delayMs = 500;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            const processoAtualizado = await api.getProcesso(processoId);
+            if (processoAtualizado) {
+              setProcessos(prev => prev.map(p => p.id === processoId ? processoAtualizado : p));
+              if (process.env.NODE_ENV !== 'production') {
+                try { console.debug('adicionarDocumentoProcesso - reconciled processo', { processoId, attempt, possuiDocumentos: Array.isArray(processoAtualizado.documentos) ? processoAtualizado.documentos.length : 0 }); } catch {}
+              }
+              break;
+            }
+          } catch (e) {
+            // ignore and retry
+          }
+          await new Promise((res) => setTimeout(res, delayMs));
+        }
+      })();
+
       adicionarNotificacao('Documento adicionado com sucesso', 'sucesso');
       return novoDocumento;
     } catch (error: any) {
@@ -1407,6 +1488,7 @@ useEffect(() => {
     globalLoading,
     setGlobalLoading,
     aplicarTagsProcesso,
+    voltarParaDepartamentoAnterior,
     adicionarComentarioProcesso,
     adicionarDocumentoProcesso,
     inicializandoUsuario,

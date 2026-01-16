@@ -241,9 +241,21 @@ model Documento {
   dataUpload      DateTime  @default(now())
   uploadPorId     Int?
   
+  // Visibilidade e controle de acesso
+  visibility      DocumentoVisibility @default(PUBLIC)
+  allowedRoles    String[]  @default([]) // lista de roles permitidas (por ex: ['GERENTE','USUARIO'])
+  allowedUserIds  Int[]     @default([]) // lista de user IDs permitidos quando visibility = USERS
+  
   @@index([processoId])
   @@index([departamentoId])
   @@index([tipo])
+}
+
+enum DocumentoVisibility {
+  PUBLIC   // visível para qualquer usuário que tenha acesso ao processo
+  ROLES    // visível apenas para users com roles listadas em allowedRoles
+  USERS    // visível apenas para users listados em allowedUserIds
+  NONE     // visível apenas para quem explicitamente foi concedido (fallback)
 }
 
 // Documentos Obrigatórios por Departamento

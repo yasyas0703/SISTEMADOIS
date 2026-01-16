@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import { X, Calendar, CheckCircle, Star, ArrowRight, FileText, Eye, Download, MessageSquare } from 'lucide-react';
+import { X, Calendar, CheckCircle, Star, ArrowRight, FileText, Eye, Download, MessageSquare, ArrowLeft, MoreHorizontal } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
-import { formatarDataHora } from '@/app/utils/helpers';
+import { formatarDataHora, formatarNomeArquivo } from '@/app/utils/helpers';
 
 interface VisualizacaoCompletaProps {
   processo: any;
@@ -12,7 +12,7 @@ interface VisualizacaoCompletaProps {
 }
 
 export default function VisualizacaoCompleta({ processo, onClose }: VisualizacaoCompletaProps) {
-  const { departamentos, setShowUploadDocumento, setShowPreviewDocumento } = useSistema();
+  const { departamentos, setShowUploadDocumento, setShowPreviewDocumento, voltarParaDepartamentoAnterior, usuarioLogado, setShowQuestionario } = useSistema();
 
   const getIconeDepartamento = (icone: any) => {
     if (typeof icone === 'function') return icone;
@@ -37,6 +37,17 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
   const departamentosOrdenados = (fluxoIds.length ? fluxoIds : departamentos.map((d: any) => d?.id))
     .map((id: any) => departamentos.find((d: any) => Number(d?.id) === Number(id)))
     .filter(Boolean) as any[];
+
+  // Mostrar apenas até o departamento atual para evitar expor respostas de etapas posteriores
+  // Determine the index of the current department by matching the department ID first
+  const idxById = departamentosOrdenados.findIndex((d: any) => Number(d?.id) === Number(processo?.departamentoAtual));
+  const departamentoAtualIndex = idxById >= 0
+    ? idxById
+    : (Number.isFinite(Number(processo?.departamentoAtualIndex)) ? Number(processo.departamentoAtualIndex) : -1);
+
+  const departamentosVisiveis = departamentoAtualIndex >= 0
+    ? departamentosOrdenados.slice(0, departamentoAtualIndex + 1)
+    : departamentosOrdenados;
 
   const numero = (v: any) => {
     const n = Number(v);
@@ -76,9 +87,24 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
                 })()}
               </p>
             </div>
-            <button onClick={onClose} className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg transition-colors">
-              <X size={20} />
-            </button>
+            <div className="flex items-center gap-2">
+              {(Number(processo?.departamentoAtualIndex ?? 0) > 0) && (
+                <button
+                  onClick={async () => {
+                    await voltarParaDepartamentoAnterior(processo.id);
+                    onClose();
+                  }}
+                  className="px-3 py-2 bg-yellow-400 hover:bg-yellow-500 text-white rounded-lg font-semibold transition flex items-center gap-2"
+                >
+                  <ArrowLeft size={16} />
+                  Voltar
+                </button>
+              )}
+
+              <button onClick={onClose} className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg transition-colors">
+                <X size={20} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -101,7 +127,7 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
             </div>
           </div>
 
-          {departamentosOrdenados.map((dept: any) => {
+          {departamentosVisiveis.map((dept: any) => {
             const respostasDept = respostasPorDept[dept.id];
             const questionario = Array.isArray(respostasDept?.questionario) ? respostasDept.questionario : [];
 
@@ -124,15 +150,50 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
 
             return (
               <div key={dept.id} className="bg-white dark:bg-[var(--card)] rounded-xl p-6 border border-gray-200 dark:border-[var(--border)] shadow-sm">
-                <h4 className="font-bold text-gray-800 dark:text-[var(--fg)] mb-4 flex items-center gap-2">
-                  {IconeDept ? <IconeDept size={20} /> : null}
-                  {dept.nome} {dept.responsavel ? `- ${dept.responsavel}` : ''}
+                <h4 className="font-bold text-gray-800 dark:text-[var(--fg)] mb-4 flex items-center gap-2 justify-between">
+                  <div className="flex items-center gap-2">
+                    {IconeDept ? <IconeDept size={20} /> : null}
+                    <div className="min-w-0">
+                      <div className="truncate">{dept.nome} {dept.responsavel ? `- ${dept.responsavel}` : ''}</div>
+                    </div>
+                  </div>
+                  <div>
+                    {usuarioLogado && (String(usuarioLogado.role || '').toUpperCase() === 'ADMIN' || String(usuarioLogado.role || '').toUpperCase() === 'GERENTE' || Number(usuarioLogado.departamentoId) === Number(dept.id)) && (
+                      <button
+                        onClick={() => setShowQuestionario({ processoId: processo.id, departamento: dept.id, somenteLeitura: false, allowEditFinalizado: true })}
+                        className="p-2 rounded hover:bg-gray-100 dark:hover:bg-[var(--border)] text-gray-600"
+                        title="Editar questionário deste departamento"
+                      >
+                        <MoreHorizontal size={16} />
+                      </button>
+                    )}
+                  </div>
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {respostasDept.questionario.map((pergunta: any) => {
                     if (pergunta?.tipo === 'file') {
                       const anexos = documentosDaPergunta(dept.id, numero(pergunta?.id));
-                      if (!anexos.length) return null;
+                      if (!anexos.length) {
+                        // Verificar se existem anexos no backend, mas são restritos para o usuário atual
+                        const counts: Record<string, number> = (processo as any)?.documentosCounts ?? {};
+                        const keySpecific = `${pergunta.id}:${dept.id}`;
+                        const keyAny = `${pergunta.id}:0`;
+                        const total = Number(counts[keySpecific] ?? counts[keyAny] ?? 0);
+                        if (total > 0) {
+                          return (
+                            <div key={pergunta.id} className="md:col-span-2">
+                              <div className="bg-gray-50 dark:bg-[var(--muted)] rounded-lg p-4 border border-transparent dark:border-[var(--border)]">
+                                <label className="block text-sm font-medium text-gray-600 mb-3">{pergunta.label}</label>
+                                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                                  <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
+                                  <span>Respondido — anexo enviado (sem permissão para visualizar)</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }
                       return (
                         <div key={pergunta.id} className="md:col-span-2">
                           <div className="bg-gray-50 dark:bg-[var(--muted)] rounded-lg p-4 border border-transparent dark:border-[var(--border)]">
@@ -143,16 +204,16 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
                               {anexos.map((doc: any) => (
                                 <div
                                   key={doc.id}
-                                  className="bg-white dark:bg-[var(--card)] rounded-lg p-3 border border-gray-200 dark:border-[var(--border)] flex items-center justify-between gap-3"
+                                  className="bg-white dark:bg-[var(--card)] rounded-lg p-3 border border-gray-200 dark:border-[var(--border)] flex items-center justify-between gap-3 w-full overflow-hidden"
                                 >
-                                  <div className="min-w-0">
+                                  <div className="flex-1 min-w-0 overflow-hidden">
                                     <div className="flex items-center gap-2 min-w-0">
                                       <FileText size={16} className="text-gray-400 flex-shrink-0" />
-                                      <span className="font-medium text-sm text-gray-800 dark:text-[var(--fg)] truncate">{doc.nome}</span>
+                                      <span className="block font-medium text-sm text-gray-800 dark:text-[var(--fg)] truncate max-w-[calc(100%-96px)]" title={doc.nome}>{formatarNomeArquivo(doc.nome)}</span>
                                     </div>
                                     <div className="text-xs text-gray-500 mt-1">{formatarDataHora(doc.dataUpload)}</div>
                                   </div>
-                                  <div className="flex gap-1 flex-shrink-0">
+                                  <div className="flex gap-1 flex-shrink-0 w-24 justify-end ml-3">
                                     <button
                                       onClick={() => setShowPreviewDocumento(doc)}
                                       className="p-1 text-cyan-600 hover:bg-cyan-100 rounded"
@@ -202,27 +263,38 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
           <div className="bg-white dark:bg-[var(--card)] rounded-xl p-6 border border-gray-200 dark:border-[var(--border)] shadow-sm">
             <h4 className="font-bold text-gray-800 dark:text-[var(--fg)] mb-4">Histórico Completo</h4>
             <div className="space-y-4">
-              {((processo?.historico || processo?.historicoEvento || []) as any[]).map((item: any, index: number) => (
-                <div key={index} className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-[var(--muted)] rounded-xl border border-transparent dark:border-[var(--border)]">
-                  <div className="mt-1">
-                    {item.tipo === 'inicio' && <Calendar className="text-blue-500" size={16} />}
-                    {item.tipo === 'conclusao' && <CheckCircle className="text-green-500" size={16} />}
-                    {item.tipo === 'finalizacao' && <Star className="text-yellow-500" size={16} />}
-                    {item.tipo === 'movimentacao' && <ArrowRight className="text-purple-500" size={16} />}
-                    {item.tipo === 'documento' && <FileText className="text-cyan-600" size={16} />}
-                    {item.tipo === 'comentario' && <MessageSquare className="text-gray-600" size={16} />}
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900 dark:text-[var(--fg)]">{item.acao}</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                      <span className="bg-gray-200 dark:bg-[var(--card)] px-2 py-1 rounded border border-transparent dark:border-[var(--border)]">{item.departamento}</span>
-                      <span className="mx-2">•</span>
-                      <span>{item.responsavel}</span>
+              {(() => {
+                const historicoCompleto = (processo?.historico || processo?.historicoEvento || []) as any[];
+                const visibleDeptNames = new Set((departamentosVisiveis || []).map((d: any) => String(d?.nome)));
+                const historicoFiltrado = historicoCompleto.filter((item: any) => {
+                  // Mostrar eventos que não têm departamento associado (sistema) e
+                  // mostrar apenas eventos cujo departamento esteja entre os visíveis
+                  if (!item?.departamento) return true;
+                  return visibleDeptNames.has(String(item.departamento));
+                });
+
+                return historicoFiltrado.map((item: any, index: number) => (
+                  <div key={index} className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-[var(--muted)] rounded-xl border border-transparent dark:border-[var(--border)]">
+                    <div className="mt-1">
+                      {item.tipo === 'inicio' && <Calendar className="text-blue-500" size={16} />}
+                      {item.tipo === 'conclusao' && <CheckCircle className="text-green-500" size={16} />}
+                      {item.tipo === 'finalizacao' && <Star className="text-yellow-500" size={16} />}
+                      {item.tipo === 'movimentacao' && <ArrowRight className="text-purple-500" size={16} />}
+                      {item.tipo === 'documento' && <FileText className="text-cyan-600" size={16} />}
+                      {item.tipo === 'comentario' && <MessageSquare className="text-gray-600" size={16} />}
                     </div>
-                    <div className="text-xs text-gray-500 mt-1">{formatarDataHora(item.data)}</div>
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900 dark:text-[var(--fg)]">{item.acao}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                        <span className="bg-gray-200 dark:bg-[var(--card)] px-2 py-1 rounded border border-transparent dark:border-[var(--border)]">{item.departamento}</span>
+                        <span className="mx-2">•</span>
+                        <span>{item.responsavel}</span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">{formatarDataHora(item.data)}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           </div>
 
@@ -246,9 +318,9 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
                 {documentos.map((doc: any) => (
                   <div key={doc.id} className="bg-gray-50 dark:bg-[var(--muted)] rounded-lg p-4 border border-gray-200 dark:border-[var(--border)]">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
                         <FileText size={16} className="text-gray-400" />
-                        <span className="font-medium text-sm">{doc.nome}</span>
+                        <span className="font-medium text-sm truncate max-w-[calc(100%-88px)]" title={doc.nome}>{formatarNomeArquivo(doc.nome)}</span>
                       </div>
                       <div className="flex gap-1">
                         <button onClick={() => setShowPreviewDocumento(doc)} className="p-1 text-cyan-600 hover:bg-cyan-100 rounded">

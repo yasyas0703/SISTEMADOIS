@@ -24,6 +24,9 @@ function jsonBigInt(data: unknown, init?: { status?: number }) {
 // GET /api/documentos?processoId=123
 export async function GET(request: NextRequest) {
   try {
+    const { user, error } = await requireAuth(request);
+    if (!user) return error;
+
     const { searchParams } = new URL(request.url);
     const processoId = searchParams.get('processoId');
     const departamentoId = searchParams.get('departamentoId');
@@ -48,7 +51,32 @@ export async function GET(request: NextRequest) {
       orderBy: { dataUpload: 'desc' },
     });
 
-    return jsonBigInt(documentos);
+    const userId = Number((user as any).id);
+    const userRole = String((user as any).role || '').toUpperCase();
+
+    const documentoPodeSerVisto = (doc: any) => {
+      try {
+        const vis = String(doc.visibility || 'PUBLIC').toUpperCase();
+        const allowedRoles: string[] = Array.isArray(doc.allowedRoles) ? doc.allowedRoles.map(r => String(r).toUpperCase()) : [];
+        const allowedUserIds: number[] = Array.isArray(doc.allowedUserIds) ? doc.allowedUserIds.map((n: any) => Number(n)) : [];
+
+        if (vis === 'PUBLIC') return true;
+        if (vis === 'ROLES') {
+          if (allowedRoles.length === 0) return false;
+          return allowedRoles.includes(userRole);
+        }
+        if (vis === 'USERS') {
+          if (allowedUserIds.length === 0) return false;
+          return allowedUserIds.includes(userId);
+        }
+        return Array.isArray(allowedUserIds) && allowedUserIds.includes(userId);
+      } catch (e) {
+        return false;
+      }
+    };
+
+    const filtrados = documentos.filter(d => documentoPodeSerVisto(d));
+    return jsonBigInt(filtrados);
   } catch (error) {
     console.error('Erro ao buscar documentos:', error);
     return jsonBigInt({ error: 'Erro ao buscar documentos' }, { status: 500 });
@@ -83,6 +111,23 @@ export async function POST(request: NextRequest) {
     const { url, path } = await uploadFile(file, `processos/${processoId}`);
     
     // Salvar no banco
+    // parse visibility metadata (optional)
+    const visibilityRaw = (formData.get('visibility') as string) || undefined;
+    const allowedRolesRaw = (formData.get('allowedRoles') as string) || undefined; // comma-separated
+    const allowedUserIdsRaw = (formData.get('allowedUserIds') as string) || undefined; // comma-separated
+
+    const allowedRolesArr = allowedRolesRaw ? allowedRolesRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const allowedUserIdsArr = allowedUserIdsRaw ? allowedUserIdsRaw.split(',').map(s => Number(s.trim())).filter(n => Number.isFinite(n)) : [];
+
+    // Normaliza visibility para o enum aceito pelo Prisma
+    const visibilityRawUpper = visibilityRaw ? String(visibilityRaw).toUpperCase() : undefined;
+    const visibilityNormalized = visibilityRawUpper && ['PUBLIC', 'ROLES', 'USERS'].includes(visibilityRawUpper)
+      ? (visibilityRawUpper as 'PUBLIC' | 'ROLES' | 'USERS')
+      : undefined;
+
+    // Não expor publicUrl quando documento for confidencial
+    const storedUrl = (visibilityRaw && visibilityRaw.toUpperCase() !== 'PUBLIC') ? '' : url;
+
     const documento = await prisma.documento.create({
       data: {
         processoId,
@@ -90,11 +135,14 @@ export async function POST(request: NextRequest) {
         tipo,
         tipoCategoria: (formData.get('tipoCategoria') as string) || null,
         tamanho: BigInt(file.size),
-        url,
+        url: storedUrl,
         path,
         departamentoId,
         perguntaId,
         uploadPorId: user.id,
+        ...(visibilityNormalized && { visibility: visibilityNormalized as any }),
+        ...(allowedRolesArr.length > 0 && { allowedRoles: allowedRolesArr }),
+        ...(allowedUserIdsArr.length > 0 && { allowedUserIds: allowedUserIdsArr }),
       },
       include: {
         departamento: {

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import {
   X, MessageSquare, FileText, Eye, CheckCircle, Clock, Calendar,
   User, AlertCircle, Tag, ArrowRight, Trash2, MoreVertical,
-  Upload, Download, Edit, Flag, Zap, Activity
+  Upload, Download, Edit, Flag, Zap, Activity, ArrowLeft
 } from 'lucide-react';
 import { Processo } from '@/app/types';
 
@@ -18,6 +18,7 @@ interface ProcessoDetalhadoProps {
   onDocumentos?: () => void;
   onAvancar?: () => void;
   onFinalizar?: () => void;
+  onVoltar?: () => void;
 }
 
 export default function ProcessoDetalhado({
@@ -29,6 +30,7 @@ export default function ProcessoDetalhado({
   onQuestionario,
   onDocumentos,
   onAvancar,
+  onVoltar,
   onFinalizar,
 }: ProcessoDetalhadoProps) {
   const [activeTab, setActiveTab] = useState('detalhes');
@@ -96,6 +98,16 @@ export default function ProcessoDetalhado({
     <div className="bg-white dark:bg-[var(--card)] rounded-2xl shadow-2xl overflow-hidden max-w-4xl w-full">
       {/* Cabeçalho */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-8 text-white relative">
+        {onVoltar && (Number(processo.departamentoAtualIndex ?? 0) > 0) && (
+          <button
+            onClick={onVoltar}
+            className="absolute top-4 right-20 px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-white rounded-lg font-semibold transition flex items-center gap-2"
+          >
+            <ArrowLeft size={16} />
+            Voltar
+          </button>
+        )}
+
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition"
@@ -234,6 +246,14 @@ export default function ProcessoDetalhado({
         {/* Botões de Ação Finais */}
         {processo.status !== 'finalizado' && (
           <div className="flex gap-3">
+            {onVoltar && (Number(processo.departamentoAtualIndex ?? 0) > 0) && (
+              <button
+                onClick={onVoltar}
+                className="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-bold transition"
+              >
+                Voltar ao Departamento Anterior
+              </button>
+            )}
             <button
               onClick={onAvancar}
               className="flex-1 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold transition"

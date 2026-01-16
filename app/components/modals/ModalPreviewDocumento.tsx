@@ -23,6 +23,7 @@ export default function ModalPreviewDocumento({ documento, onClose }: ModalPrevi
   const isPdf = documento?.tipo === 'application/pdf' || documento?.nome?.toLowerCase()?.endsWith('.pdf');
   const [urlAvailable, setUrlAvailable] = useState<boolean | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(documento?.url ?? null);
 
   useEffect(() => {
     let mounted = true;
@@ -30,7 +31,37 @@ export default function ModalPreviewDocumento({ documento, onClose }: ModalPrevi
     setUrlError(null);
 
     const check = async () => {
-      if (!documento?.url) {
+      let urlToCheck = resolvedUrl;
+
+      // Se não temos URL armazenada, tenta obter do backend (endpoint que retorna signed URL)
+      if (!urlToCheck && documento?.id) {
+        try {
+          const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+          const headers: any = {};
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+          const resp = await fetch(`/api/documentos/${documento.id}`, { method: 'GET', headers });
+          if (resp.ok) {
+            const data = await resp.json().catch(() => null);
+            urlToCheck = data?.url ?? null;
+            if (urlToCheck) setResolvedUrl(urlToCheck);
+          } else {
+            const body = await resp.json().catch(() => ({} as any));
+            if (mounted) {
+              setUrlAvailable(false);
+              setUrlError(body?.error || `Recurso indisponível (status ${resp.status})`);
+            }
+            return;
+          }
+        } catch (e: any) {
+          if (mounted) {
+            setUrlAvailable(false);
+            setUrlError('Erro ao recuperar URL do documento');
+          }
+          return;
+        }
+      }
+
+      if (!urlToCheck) {
         if (mounted) {
           setUrlAvailable(false);
           setUrlError('URL do documento ausente');
@@ -40,7 +71,7 @@ export default function ModalPreviewDocumento({ documento, onClose }: ModalPrevi
 
       try {
         // Tenta um HEAD para checar existência; caso o servidor não permita HEAD, tenta GET com modo 'no-cors' falhando graciosamente
-        const resp = await fetch(documento.url, { method: 'HEAD' });
+        const resp = await fetch(urlToCheck, { method: 'HEAD' });
         if (!mounted) return;
         if (resp.ok) {
           setUrlAvailable(true);
@@ -66,18 +97,18 @@ export default function ModalPreviewDocumento({ documento, onClose }: ModalPrevi
     return () => {
       mounted = false;
     };
-  }, [documento?.url]);
+  }, [documento?.id, documento?.url, resolvedUrl]);
 
   const abrirNovaAba = () => {
     try {
-      window.open(documento.url, '_blank', 'noopener,noreferrer');
+      window.open(resolvedUrl || documento.url, '_blank', 'noopener,noreferrer');
     } catch {}
   };
 
   const baixar = () => {
     try {
       const a = document.createElement('a');
-      a.href = documento.url;
+      a.href = resolvedUrl || documento.url;
       a.download = documento.nome;
       document.body.appendChild(a);
       a.click();
@@ -127,7 +158,7 @@ export default function ModalPreviewDocumento({ documento, onClose }: ModalPrevi
               <>
                 {isImage && (
                   <Image
-                    src={documento.url}
+                    src={resolvedUrl || documento.url}
                     alt={documento.nome}
                     width={1600}
                     height={1200}
@@ -137,7 +168,7 @@ export default function ModalPreviewDocumento({ documento, onClose }: ModalPrevi
                   />
                 )}
                 {isPdf && (
-                  <iframe src={documento.url} className="w-full h-full" title="Pré-visualização PDF" />
+                  <iframe src={resolvedUrl || documento.url} className="w-full h-full" title="Pré-visualização PDF" />
                 )}
                 {!isImage && !isPdf && (
                   <div className="text-center text-gray-500 dark:text-gray-300 p-8">

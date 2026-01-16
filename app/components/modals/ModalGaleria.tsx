@@ -4,7 +4,7 @@ import React from 'react';
 import { X, File, Download, Eye, Trash2 } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import { Documento } from '@/app/types';
-import { formatarTamanhoParcela, formatarDataHora } from '@/app/utils/helpers';
+import { formatarTamanhoParcela, formatarDataHora, formatarNomeArquivo } from '@/app/utils/helpers';
 import { api } from '@/app/utils/api';
 
 interface GaleriaDocumentosProps {
@@ -84,7 +84,7 @@ export default function GaleriaDocumentos({ onClose, departamentoId, processoId,
     return () => {
       cancelled = true;
     };
-  }, [processoId, departamentoId]);
+  }, [processoId, departamentoId, processos]);
 
   const documentos: Documento[] = React.useMemo(() => {
     // Se temos processoId, preferimos a fonte do backend (lista completa)
@@ -233,8 +233,8 @@ export default function GaleriaDocumentos({ onClose, departamentoId, processoId,
                   className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all hover:bg-gray-50"
                 >
                   <div className="flex justify-center mb-3">{getIconeByTipo(doc.tipo)}</div>
-                  <p className="font-medium text-gray-900 text-sm text-center truncate">
-                    {doc.nome}
+                  <p className="font-medium text-gray-900 text-sm text-center truncate" title={doc.nome}>
+                    {formatarNomeArquivo(doc.nome)}
                   </p>
                   <p className="text-xs text-gray-600 text-center mt-1">
                     {formatarTamanhoParcela(Number(doc.tamanho || 0))} • {doc.tipo}
