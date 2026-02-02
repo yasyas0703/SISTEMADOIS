@@ -84,8 +84,8 @@ export default function NotificacoesPanel({ onClose }: NotificacoesPanelProps) {
   };
 
   return (
-    <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50">
-      <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+    <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50">
+      <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
         <h3 className="font-semibold text-gray-900">
           Notificações
           {totalNaoLidas > 0 && (
@@ -94,7 +94,7 @@ export default function NotificacoesPanel({ onClose }: NotificacoesPanelProps) {
             </span>
           )}
         </h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 justify-end">
           {!notificacoesNavegadorAtivas && (
             <button
               onClick={async () => {

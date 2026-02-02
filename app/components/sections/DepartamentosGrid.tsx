@@ -97,7 +97,7 @@ export default function DepartamentosGrid({
         </p>
         <button
           onClick={onCriarDepartamento}
-          className="bg-gradient-to-r from-purple-500 to-purple-600 text-white px-8 py-4 rounded-xl font-medium inline-flex items-center gap-2"
+          className="bg-gradient-to-r from-purple-500 to-purple-600 text-white px-6 py-3 sm:px-8 sm:py-4 rounded-xl font-medium inline-flex items-center gap-2"
         >
           <Plus size={20} />
           Criar Primeiro Departamento

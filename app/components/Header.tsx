@@ -54,8 +54,8 @@ export default function Header({
 
   return (
     <div className="bg-white shadow-lg border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between gap-6">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           {/* Logo e Título */}
           <div className="flex items-center gap-4 flex-1 min-w-0">
             <div className="bg-gradient-to-br from-cyan-400 to-blue-600 p-[2px] rounded-2xl shadow-xl">
@@ -89,7 +89,7 @@ export default function Header({
           </div>
 
           {/* Ações e Botões */}
-          <div className="flex items-center justify-end gap-3 flex-wrap">
+          <div className="flex w-full lg:w-auto items-center justify-start lg:justify-end gap-2 sm:gap-3 flex-wrap">
             {/* Indicador de status em tempo real removido conforme solicitado pelo usuário */}
             {/* Notificações */}
             <div className="relative">
@@ -123,7 +123,7 @@ export default function Header({
 
             {/* Botões de Criação */}
             {temPermissao('criar_processo') && (
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={onSelecionarTemplate}
                   className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-4 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
@@ -190,11 +190,11 @@ export default function Header({
 
             {/* Info Usuário */}
             {usuarioLogado && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-xl">
+              <div className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-100 rounded-xl max-w-full">
                 <User size={16} className="text-gray-600" />
-                <span className="text-sm font-medium text-gray-700">{usuarioLogado.nome}</span>
+                <span className="text-sm font-medium text-gray-700 max-w-[140px] sm:max-w-[220px] truncate">{usuarioLogado.nome}</span>
                 <span
-                  className={`px-2 py-1 rounded-full text-xs ${
+                  className={`hidden sm:inline-flex px-2 py-1 rounded-full text-xs ${
                     usuarioLogado.role === 'admin'
                       ? 'bg-purple-100 text-purple-700'
                       : usuarioLogado.role === 'gerente'

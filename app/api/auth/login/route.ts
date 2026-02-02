@@ -37,10 +37,25 @@ export async function POST(request: NextRequest) {
       });
     } catch (dbError: any) {
       console.error('Erro ao conectar com o banco de dados:', dbError);
+
+      const dbMessage =
+        `${dbError?.message ?? ''} ${dbError?.cause?.message ?? ''}`.trim();
+
+      // Supabase Pooler: erro típico quando o host/região/credenciais não batem com o projeto
+      if (dbMessage.includes('Tenant or user not found')) {
+        return NextResponse.json(
+          {
+            error: 'Erro de conexão com o banco de dados',
+            details:
+              'O Supabase retornou "Tenant or user not found". Normalmente é DATABASE_URL de pooling apontando para a região errada ou credenciais/projeto incorretos. Refaça a DATABASE_URL copiando do Supabase Dashboard (Settings > Database > Connection pooling).',
+          },
+          { status: 503 }
+        );
+      }
       
       // Verificar se é erro de autenticação
-      if (dbError.message?.includes('Authentication failed') || 
-          dbError.message?.includes('credentials') ||
+      if (dbMessage.includes('Authentication failed') || 
+          dbMessage.includes('credentials') ||
           dbError.code === 'P1000') {
         return NextResponse.json(
           { 
@@ -52,7 +67,7 @@ export async function POST(request: NextRequest) {
       }
       
       // Outros erros de conexão
-      if (dbError.code === 'P1001' || dbError.message?.includes('connect')) {
+      if (dbError.code === 'P1001' || dbMessage.includes('connect')) {
         return NextResponse.json(
           { 
             error: 'Erro de conexão com o banco de dados',

@@ -30,24 +30,24 @@ export default function Filtros({
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-6">
       <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex w-full flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
           {/* Busca */}
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               placeholder="Buscar processos..."
               onChange={(e) => onBuscaChange(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200 w-64"
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200 w-full sm:w-64"
             />
           </div>
 
           {/* Status */}
           <select
             onChange={(e) => onStatusChange(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200"
+            className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200"
           >
             <option value="todos">Todos os processos</option>
             <option value="andamento">Em andamento</option>
@@ -59,14 +59,14 @@ export default function Filtros({
           <div className="relative">
             <button
               onClick={() => setShowTagsModal(!showTagsModal)}
-              className="px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-50 flex items-center gap-2"
+              className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-50 flex items-center gap-2"
             >
               <Filter size={16} />
               Tags {filtroTags.length > 0 && `(${filtroTags.length})`}
             </button>
 
             {showTagsModal && (
-              <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-50 w-64">
+              <div className="absolute left-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-50 w-72 max-w-[calc(100vw-2rem)]">
                 <div className="space-y-2">
                   {tags.map((tag) => (
                     <label
@@ -103,7 +103,7 @@ export default function Filtros({
           {/* Departamentos */}
           <select
             onChange={(e) => onDepartamentoChange(e.target.value ? parseInt(e.target.value) : null)}
-            className="px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200"
+            className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200"
           >
             <option value="">Todos os departamentos</option>
             {departamentos.map((dept) => (

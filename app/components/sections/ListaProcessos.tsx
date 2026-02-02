@@ -4,6 +4,7 @@ import React from 'react';
 import {
   Building,
   Eye,
+  ArrowLeft,
   ArrowRight,
   CheckCircle,
   MessageSquare,
@@ -34,6 +35,7 @@ interface ListaProcessosProps {
   onDocumentos?: (processo: Processo, options?: { abrirGaleria?: boolean }) => void;
   onExcluir?: (processo: Processo) => void;
   onAvancar?: (processo: Processo) => void;
+  onVoltar?: (processo: Processo) => void;
   onFinalizar?: (processo: Processo) => void;
   onTags?: (processo: Processo) => void;
   onGerenciarTags?: (processo: Processo) => void;
@@ -51,6 +53,7 @@ export default function ListaProcessos({
   onDocumentos,
   onExcluir,
   onAvancar,
+  onVoltar,
   onFinalizar,
   onTags,
   onGerenciarTags,
@@ -205,7 +208,7 @@ export default function ListaProcessos({
 
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-gray-100">
-      <div className="p-6 border-b border-gray-200">
+      <div className="p-4 sm:p-6 border-b border-gray-200">
         <h2 className="text-xl font-bold text-gray-900">Processos Detalhados</h2>
       </div>
 
@@ -213,12 +216,14 @@ export default function ListaProcessos({
         {processosFiltrados.map((processo) => {
           const isFinalizado = processo.status === 'finalizado';
           const isUltimoDepartamento = processo.departamentoAtualIndex === (processo.fluxoDepartamentos?.length || 1) - 1;
+          const isPrimeiroDepartamento = (processo.departamentoAtualIndex || 0) <= 0;
           const departamentoAtual = getDepartamentoAtual(processo);
           const nomeEmpresa = getNomeEmpresa(processo);
           const nomeServico = processo.nome || processo.nomeServico || 'Processo';
           const comentariosCount = (processo as any).comentariosCount ?? (processo.comentarios || []).length;
           const documentosCount = (processo as any).documentosCount ?? (processo.documentos || []).length;
           const podeAvancar = Boolean(onAvancar) && temPermissao(usuarioLogado, 'mover_processo', { departamentoAtual: processo.departamentoAtual });
+          const podeVoltar = Boolean(onVoltar) && temPermissao(usuarioLogado, 'mover_processo', { departamentoAtual: processo.departamentoAtual });
           const podeFinalizar =
             Boolean(onFinalizar) && temPermissao(usuarioLogado, 'finalizar_processo', { departamentoAtual: processo.departamentoAtual, isUltimoDepartamento });
           const podeGerenciarTags = Boolean(onGerenciarTags) && temPermissao(usuarioLogado, 'gerenciar_tags');
@@ -228,9 +233,9 @@ export default function ListaProcessos({
           return (
             <div
               key={processo.id}
-              className="p-6 hover:bg-gray-50 transition-all duration-200"
+              className="p-4 sm:p-6 hover:bg-gray-50 transition-all duration-200"
             >
-              <div className="flex justify-between items-start mb-6 gap-4">
+              <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start mb-6 gap-4">
                 {/* Coluna Esquerda - Informações */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start gap-3 mb-3">
@@ -376,13 +381,13 @@ export default function ListaProcessos({
                 </div>
 
                 {/* Coluna Direita - Ações */}
-                <div className="flex gap-2 justify-between items-center">
-                  <div className="flex gap-3">
+                <div className="flex w-full lg:w-auto flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-center justify-start lg:justify-end">
+                  <div className="flex flex-wrap gap-2">
                     {isFinalizado && (
-                      <div className="flex gap-3">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() => onProcessoClicado(processo)}
-                          className="bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                          className="bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
                         >
                           <Eye size={16} />
                           Ver Completo
@@ -391,7 +396,7 @@ export default function ListaProcessos({
                         {onComentarios && (
                           <button
                             onClick={() => onComentarios(processo)}
-                            className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                            className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
                           >
                             <MessageSquare size={16} />
                             Comentários ({comentariosCount})
@@ -401,7 +406,7 @@ export default function ListaProcessos({
                         {onQuestionario && (
                           <button
                             onClick={() => onQuestionario(processo, { somenteLeitura: true })}
-                            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
                           >
                             <FileText size={16} />
                             Ver Questionário
@@ -411,7 +416,7 @@ export default function ListaProcessos({
                         {onDocumentos && (
                           <button
                             onClick={() => onDocumentos(processo, { abrirGaleria: true })}
-                            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
                           >
                             <FileText size={16} />
                             Documentos ({documentosCount})
@@ -425,7 +430,7 @@ export default function ListaProcessos({
                         {onComentarios && (
                           <button
                             onClick={() => onComentarios(processo)}
-                            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
                           >
                             <MessageSquare size={16} />
                             Comentários ({comentariosCount})
@@ -435,17 +440,28 @@ export default function ListaProcessos({
                         {onQuestionario && (
                           <button
                             onClick={() => onQuestionario(processo, { somenteLeitura: false })}
-                            className="bg-gradient-to-r from-cyan-500 to-teal-600 hover:from-cyan-600 hover:to-teal-700 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                            className="bg-gradient-to-r from-cyan-500 to-teal-600 hover:from-cyan-600 hover:to-teal-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
                           >
                             <Edit size={16} />
                             Questionário
                           </button>
                         )}
 
+                        {!isPrimeiroDepartamento && onVoltar && podeVoltar && (
+                          <button
+                            onClick={() => onVoltar(processo)}
+                            className="bg-gradient-to-r from-slate-500 to-gray-600 hover:from-slate-600 hover:to-gray-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl whitespace-nowrap"
+                            title="Voltar para o departamento anterior"
+                          >
+                            <ArrowLeft size={16} />
+                            Voltar
+                          </button>
+                        )}
+
                         {!isUltimoDepartamento && onAvancar && podeAvancar && (
                           <button
                             onClick={() => onAvancar(processo)}
-                            className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl"
+                            className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl whitespace-nowrap"
                           >
                             <ArrowRight size={16} />
                             Avançar ({(processo.departamentoAtualIndex || 0) + 1}/{processo.fluxoDepartamentos?.length || 1})
@@ -455,7 +471,7 @@ export default function ListaProcessos({
                         {isUltimoDepartamento && onFinalizar && podeFinalizar && (
                           <button
                             onClick={() => onFinalizar(processo)}
-                            className="bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl"
+                            className="bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl whitespace-nowrap"
                           >
                             <CheckCircle size={16} />
                             Finalizar
@@ -465,7 +481,7 @@ export default function ListaProcessos({
                         {onGerenciarTags && podeGerenciarTags && (
                           <button
                             onClick={() => onGerenciarTags(processo)}
-                            className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                            className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
                           >
                             <Star size={20} />
                             Gerenciar Tags
@@ -475,7 +491,7 @@ export default function ListaProcessos({
                         {onTags && podeAplicarTags && (
                           <button
                             onClick={() => onTags(processo)}
-                            className="bg-gradient-to-r from-violet-500 to-fuchsia-600 hover:from-violet-600 hover:to-fuchsia-700 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                            className="bg-gradient-to-r from-violet-500 to-fuchsia-600 hover:from-violet-600 hover:to-fuchsia-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
                           >
                             <Star size={16} />
                             Tags {(processo.tags || []).length > 0 ? `(${(processo.tags || []).length})` : ''}

@@ -13,6 +13,7 @@ interface ModalUploadDocumentoProps {
   processo?: Processo;
   perguntaId?: number | null;
   perguntaLabel?: string | null;
+  departamentoId?: number | null;
   onClose: () => void;
 }
 
@@ -20,6 +21,7 @@ export default function ModalUploadDocumento({
   processo,
   perguntaId = null,
   perguntaLabel = null,
+  departamentoId = null,
   onClose,
 }: ModalUploadDocumentoProps) {
   const { adicionarDocumentoProcesso, adicionarNotificacao, mostrarAlerta, setProcessos, usuarios, usuarioLogado } = useSistema();
@@ -39,7 +41,13 @@ export default function ModalUploadDocumento({
   const documentos = documentosLocal;
   const documentosFiltrados = React.useMemo(() => {
     if (perguntaId) {
-      return documentos.filter((d: any) => Number(d.perguntaId) === Number(perguntaId));
+      return documentos.filter((d: any) => {
+        if (Number(d.perguntaId) !== Number(perguntaId)) return false;
+        if (departamentoId === null || departamentoId === undefined) return true;
+        const dDept = Number(d?.departamentoId ?? d?.departamento_id);
+        if (!Number.isFinite(dDept)) return true;
+        return dDept === Number(departamentoId);
+      });
     }
 
     // Quando aberto para um processo, mostrar apenas os documentos do departamento atual
@@ -50,7 +58,7 @@ export default function ModalUploadDocumento({
     }
 
     return documentos;
-  }, [documentos, perguntaId, processo, processo?.departamentoAtual]);
+  }, [documentos, perguntaId, departamentoId, processo]);
 
   const handleArquivosSelecionados = (fileList: FileList | null) => {
     if (!fileList) return;
@@ -91,7 +99,7 @@ export default function ModalUploadDocumento({
               processo.id,
               a.file,
               a.tipo,
-              processo.departamentoAtual,
+              (departamentoId ?? undefined) ?? processo.departamentoAtual,
               perguntaId ?? undefined,
               {
                 visibility,

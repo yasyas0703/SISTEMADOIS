@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Plus, Building2, AlertCircle } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import { api } from '@/app/utils/api';
@@ -78,6 +78,7 @@ export default function Home() {
     setShowPreviewDocumento,
     excluirProcesso,
     avancarParaProximoDepartamento,
+    voltarParaDepartamentoAnterior,
     finalizarProcesso,
     mostrarAlerta,
     mostrarConfirmacao,
@@ -91,6 +92,33 @@ export default function Home() {
   const [showVisualizacao, setShowVisualizacao] = useState<Processo | null>(null);
   const [showProcessoDetalhado, setShowProcessoDetalhado] = useState<Processo | null>(null);
   const [departamentoEmEdicao, setDepartamentoEmEdicao] = useState<Departamento | null>(null);
+
+  // Mantém o modal de visualização completo em sincronia com o estado global.
+  // Ex.: se apagar documento na galeria/upload, o modal deve refletir imediatamente.
+  useEffect(() => {
+    if (!showVisualizacao) return;
+    const atualizado = (processos || []).find((p) => Number(p?.id) === Number(showVisualizacao?.id));
+    if (!atualizado) return;
+
+    const docsAtualizados = Array.isArray((atualizado as any)?.documentos) ? (atualizado as any).documentos : null;
+    if (!docsAtualizados) return;
+
+    const sameDocList = (a: any[], b: any[]) => {
+      if (!Array.isArray(a) || !Array.isArray(b)) return false;
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (Number(a[i]?.id) !== Number(b[i]?.id)) return false;
+      }
+      return true;
+    };
+
+    setShowVisualizacao((prev) => {
+      if (!prev || Number(prev?.id) !== Number((atualizado as any)?.id)) return prev;
+      const prevDocs = Array.isArray((prev as any)?.documentos) ? (prev as any).documentos : [];
+      if (sameDocList(prevDocs, docsAtualizados)) return prev;
+      return { ...(prev as any), documentos: docsAtualizados } as any;
+    });
+  }, [processos, showVisualizacao?.id]);
 
   const handleLogin = (usuario: any) => {
     setUsuarioLogado(usuario);
@@ -244,7 +272,7 @@ export default function Home() {
         onLogout={() => setUsuarioLogado(null)}
       />
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
         {/* Alertas */}
         <SecaoAlertas />
 
@@ -252,8 +280,8 @@ export default function Home() {
         <DashboardStats />
 
         {/* Departamentos */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
-          <div className="flex justify-between items-center mb-6">
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 sm:p-8">
+          <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-6">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Fluxo dos Departamentos</h2>
               <p className="text-gray-600">
@@ -262,12 +290,12 @@ export default function Home() {
                   : 'Arraste os processos entre os departamentos'}
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full lg:w-auto lg:justify-end">
               {/* Botão Cadastrar Empresa - apenas admin */}
               {usuarioLogado?.role === 'admin' && (
                 <button
                   onClick={() => setShowCadastrarEmpresa(true)}
-                  className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2"
+                  className="w-full sm:w-auto bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 whitespace-nowrap"
                 >
                   <Plus size={18} />
                   Cadastrar Empresa
@@ -276,7 +304,7 @@ export default function Home() {
               {/* Botões de empresas - todos podem ver */}
               <button
                 onClick={() => setShowListarEmpresas('cadastradas')}
-                className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl whitespace-nowrap"
               >
                 <span className="inline-flex items-center gap-2">
                   <Building2 size={18} />
@@ -285,7 +313,7 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setShowListarEmpresas('nao-cadastradas')}
-                className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                className="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-orange-600 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl whitespace-nowrap"
               >
                 <span className="inline-flex items-center gap-2">
                   <AlertCircle size={18} />
@@ -296,7 +324,7 @@ export default function Home() {
               {usuarioLogado?.role === 'admin' && (
                 <button
                   onClick={() => setShowCriarDepartamento(true)}
-                  className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                  className="w-full sm:w-auto bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl whitespace-nowrap"
                 >
                   <span className="inline-flex items-center gap-2">
                     <Plus size={18} />
@@ -464,6 +492,11 @@ export default function Home() {
           perguntaLabel={
             typeof showUploadDocumento === 'object' && showUploadDocumento?.perguntaLabel
               ? showUploadDocumento.perguntaLabel
+              : null
+          }
+          departamentoId={
+            typeof showUploadDocumento === 'object' && showUploadDocumento?.departamentoId !== undefined
+              ? showUploadDocumento.departamentoId
               : null
           }
           onClose={() => setShowUploadDocumento(null)}

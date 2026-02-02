@@ -185,7 +185,13 @@ export default function ModalQuestionarioProcesso({
     const filtered = docs.filter((d: any) => {
       const dPerg = Number(d?.perguntaId ?? d?.pergunta_id);
       if (!Number.isFinite(dPerg)) return false;
-      return dPerg === Number(perguntaId);
+      if (dPerg !== Number(perguntaId)) return false;
+
+      const dDeptRaw = d?.departamentoId ?? d?.departamento_id;
+      const dDept = Number(dDeptRaw);
+      // Alguns registros antigos podem não ter departamentoId; ainda assim pertence ao processo/pergunta
+      if (!Number.isFinite(dDept)) return true;
+      return dDept === Number(departamentoId);
     });
     if (process.env.NODE_ENV !== 'production') {
       try {
@@ -588,6 +594,7 @@ export default function ModalQuestionarioProcesso({
                     id: processoId,
                     perguntaId: pergunta.id,
                     perguntaLabel: pergunta.label,
+                    departamentoId,
                   });
                 }}
                 className="w-full px-4 py-3 border-2 border-dashed border-blue-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 font-medium"

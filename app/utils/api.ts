@@ -195,8 +195,48 @@ const normalizeProcesso = (raw: any) => {
     })
     .filter((h: any) => h?.acao);
 
-  const questionariosPorDepartamento: Record<number, any[]> = {};
   const respostasHistorico: Record<number, any> = {};
+
+  // Alguns endpoints já retornam `questionariosPorDepartamento` agrupado (com chaves string).
+  // Preservamos esse campo para evitar perder perguntas ao recarregar o processo.
+  const baseQuestionariosPorDepartamento: Record<number, any[]> = (() => {
+    const qpd = raw?.questionariosPorDepartamento;
+    if (!qpd || typeof qpd !== 'object') return {};
+
+    const out: Record<number, any[]> = {};
+    for (const [deptKey, list] of Object.entries(qpd as Record<string, any>)) {
+      const departamentoId = Number(deptKey);
+      if (!Number.isFinite(departamentoId) || departamentoId <= 0) continue;
+      const arr = Array.isArray(list) ? list : [];
+      out[departamentoId] = arr
+        .map((q: any) => {
+          const id = Number(q?.id);
+          if (!Number.isFinite(id)) return null;
+          return {
+            id,
+            label: String(q?.label ?? ''),
+            tipo: normalizeTipoCampo(q?.tipo),
+            obrigatorio: Boolean(q?.obrigatorio),
+            opcoes: Array.isArray(q?.opcoes) ? q.opcoes : [],
+            ordem: Number(q?.ordem ?? 0),
+            condicao:
+              q?.condicaoPerguntaId
+                ? {
+                    perguntaId: Number(q.condicaoPerguntaId),
+                    operador: (q.condicaoOperador || 'igual') as any,
+                    valor: String(q.condicaoValor ?? ''),
+                  }
+                : undefined,
+          };
+        })
+        .filter(Boolean)
+        .sort((a: any, b: any) => (Number(a.ordem) || 0) - (Number(b.ordem) || 0));
+    }
+    return out;
+  })();
+
+  const hasBaseQpd = Object.keys(baseQuestionariosPorDepartamento).length > 0;
+  const questionariosPorDepartamento: Record<number, any[]> = hasBaseQpd ? baseQuestionariosPorDepartamento : {};
 
   const questionarios = questionariosArray
     .map((q: any) => {
@@ -222,16 +262,19 @@ const normalizeProcesso = (raw: any) => {
       };
 
       if (Number.isFinite(departamentoId) && departamentoId > 0) {
-        questionariosPorDepartamento[departamentoId] = questionariosPorDepartamento[departamentoId] || [];
-        questionariosPorDepartamento[departamentoId].push({
-          id: normalized.id,
-          label: normalized.label,
-          tipo: normalized.tipo,
-          obrigatorio: normalized.obrigatorio,
-          opcoes: normalized.opcoes,
-          ordem: normalized.ordem,
-          condicao: normalized.condicao,
-        });
+        // Se já veio agrupado do servidor, evitamos duplicar.
+        if (!hasBaseQpd) {
+          questionariosPorDepartamento[departamentoId] = questionariosPorDepartamento[departamentoId] || [];
+          questionariosPorDepartamento[departamentoId].push({
+            id: normalized.id,
+            label: normalized.label,
+            tipo: normalized.tipo,
+            obrigatorio: normalized.obrigatorio,
+            opcoes: normalized.opcoes,
+            ordem: normalized.ordem,
+            condicao: normalized.condicao,
+          });
+        }
 
         // Monta um "snapshot" de respostas por departamento para o modo somente leitura
         const respostas = normalized.respostas;

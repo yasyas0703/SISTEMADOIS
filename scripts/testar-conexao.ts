@@ -1,9 +1,35 @@
-import 'dotenv/config';
+import fs from 'fs';
+import dotenv from 'dotenv';
+import { lookup } from 'dns/promises';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+function carregarEnv() {
+  // Next.js carrega .env e .env.local; nossos scripts precisam seguir o mesmo padrão
+  const envPath = '.env';
+  const envLocalPath = '.env.local';
+
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+  }
+  if (fs.existsSync(envLocalPath)) {
+    dotenv.config({ path: envLocalPath, override: true });
+  }
+}
+
+async function testarDNS(host: string) {
+  try {
+    const result = await lookup(host);
+    return { ok: true as const, address: result.address };
+  } catch (err: any) {
+    return { ok: false as const, code: err?.code ?? 'UNKNOWN', message: err?.message ?? String(err) };
+  }
+}
+
 async function testarConexao() {
+  carregarEnv();
+
   console.log('🔍 Testando conexão com o banco de dados...\n');
 
   // Verificar se DATABASE_URL está definida
@@ -16,8 +42,10 @@ async function testarConexao() {
   }
 
   // Mostrar informações da URL (sem senha)
+  let parsedUrl: URL | null = null;
   try {
     const url = new URL(databaseUrl.replace(/^postgresql:\/\//, 'http://'));
+    parsedUrl = url;
     console.log('📋 Informações da conexão:');
     console.log(`   Host: ${url.hostname}`);
     console.log(`   Porta: ${url.port || '5432'}`);
@@ -26,6 +54,21 @@ async function testarConexao() {
     console.log(`   Senha: ${url.password ? '***' : 'não informada'}\n`);
   } catch (e) {
     console.log('⚠️  Não foi possível analisar a URL (formato pode estar incorreto)\n');
+  }
+
+  // Diagnóstico rápido de DNS (muito comum em rede corporativa/VPN)
+  if (parsedUrl?.hostname) {
+    const dnsResult = await testarDNS(parsedUrl.hostname);
+    if (!dnsResult.ok) {
+      console.error('❌ Problema de DNS ao resolver o host do banco:\n');
+      console.error(`   Host: ${parsedUrl.hostname}`);
+      console.error(`   Erro: ${dnsResult.code} - ${dnsResult.message}\n`);
+      console.log('💡 Isso normalmente acontece por DNS/VPN/Proxy/Firewall. Tente:');
+      console.log('   1. Desligar VPN/Proxy corporativo (se houver)');
+      console.log('   2. Trocar DNS para 1.1.1.1/1.0.0.1 (Cloudflare) ou 8.8.8.8/8.8.4.4 (Google)');
+      console.log('   3. Rodar no PowerShell: ipconfig /flushdns');
+      process.exit(1);
+    }
   }
 
   // Tentar conectar
@@ -43,6 +86,16 @@ async function testarConexao() {
   } catch (error: any) {
     console.error('❌ Erro ao conectar com o banco de dados:\n');
     console.error(`   ${error.message}\n`);
+
+    if (error.message?.includes('Tenant or user not found')) {
+      console.log('💡 Esse erro é típico do Supabase Pooler quando:');
+      console.log('   1. A URL de pooling está apontando para a região errada (host aws-*-<região>.pooler...)');
+      console.log('   2. O usuário/senha não batem com o projeto');
+      console.log('   3. O projeto foi pausado/removido, ou a rede está alterando a resolução/roteamento\n');
+      console.log('✅ Como corrigir de forma garantida:');
+      console.log('   - Supabase Dashboard > Settings > Database > Connection string');
+      console.log('   - Copie a string de "Connection pooling" (Transaction mode) e cole como DATABASE_URL\n');
+    }
 
     if (error.message?.includes('Authentication failed') || error.code === 'P1000') {
       console.log('💡 O problema é de autenticação. Verifique:');
