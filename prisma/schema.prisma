@@ -210,6 +210,10 @@ model Comentario {
   departamentoId  Int?
   departamento    Departamento? @relation(fields: [departamentoId], references: [id])
   
+  parentId        Int?      // ID do comentário pai (para respostas)
+  parent          Comentario? @relation("ComentarioRespostas", fields: [parentId], references: [id], onDelete: Cascade)
+  respostas       Comentario[] @relation("ComentarioRespostas")
+  
   mencoes         String[]  @default([]) // Array de emails/nomes mencionados
   editado         Boolean   @default(false)
   editadoEm       DateTime?
@@ -218,6 +222,7 @@ model Comentario {
   
   @@index([processoId])
   @@index([autorId])
+  @@index([parentId])
 }
 
 // Documentos dos Processos
@@ -308,6 +313,7 @@ enum TipoCampo {
   DATE
   BOOLEAN
   SELECT
+  CHECKBOX
   FILE
   PHONE
   EMAIL

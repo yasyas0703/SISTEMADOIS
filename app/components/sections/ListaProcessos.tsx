@@ -22,6 +22,7 @@ import * as LucideIcons from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import { Processo } from '@/app/types';
 import { temPermissao } from '@/app/utils/permissions';
+import { verificarMencoesNaoLidasPorNotificacoes } from '@/app/utils/mentions';
 
 interface ListaProcessosProps {
   onProcessoClicado: (processo: Processo) => void;
@@ -58,7 +59,7 @@ export default function ListaProcessos({
   onTags,
   onGerenciarTags,
 }: ListaProcessosProps) {
-  const { processos, tags, usuarioLogado } = useSistema();
+  const { processos, tags, usuarioLogado, notificacoes } = useSistema();
 
   const getNomeEmpresa = (proc: Processo): string => {
     const nomeEmpresa = (proc as any).nomeEmpresa;
@@ -396,10 +397,13 @@ export default function ListaProcessos({
                         {onComentarios && (
                           <button
                             onClick={() => onComentarios(processo)}
-                            className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
+                            className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap relative"
                           >
                             <MessageSquare size={16} />
                             Comentários ({comentariosCount})
+                            {verificarMencoesNaoLidasPorNotificacoes(notificacoes as any, processo.id) && (
+                              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+                            )}
                           </button>
                         )}
 
@@ -430,10 +434,13 @@ export default function ListaProcessos({
                         {onComentarios && (
                           <button
                             onClick={() => onComentarios(processo)}
-                            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap relative"
                           >
                             <MessageSquare size={16} />
                             Comentários ({comentariosCount})
+                            {verificarMencoesNaoLidasPorNotificacoes(notificacoes as any, processo.id) && (
+                              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+                            )}
                           </button>
                         )}
 

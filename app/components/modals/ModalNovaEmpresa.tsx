@@ -1,13 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { X, ArrowRight, Edit, Plus, ClipboardList, Mail, Phone } from 'lucide-react';
+import { X, ArrowRight, Edit, Plus, ClipboardList } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import { Empresa } from '@/app/types';
 import ModalBase from './ModalBase';
 import LoadingOverlay from '../LoadingOverlay';
 import { api } from '@/app/utils/api';
-// (Telefone/email inputs ainda não presentes aqui; removendo imports não utilizados)
 
 interface ModalNovaEmpresaProps {
   onClose: () => void;
@@ -20,8 +19,6 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
   const [responsavelId, setResponsavelId] = useState<number | null>(null);
   const [usuariosResponsaveis, setUsuariosResponsaveis] = useState<Array<{ id: number; nome: string; email: string; role: string; ativo?: boolean }>>([]);
   const [erroUsuariosResponsaveis, setErroUsuariosResponsaveis] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
-  const [telefone, setTelefone] = useState("");
   const [nomeServico, setNomeServico] = useState("");
   const [empresaSelecionada, setEmpresaSelecionada] = useState<Empresa | null>(null);
   
@@ -75,6 +72,7 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
     { valor: "date", label: "Data" },
     { valor: "boolean", label: "Sim/Não" },
     { valor: "select", label: "Seleção Única" },
+    { valor: "checkbox", label: "Checklist" },
     { valor: "file", label: "Arquivo/Anexo" },
     { valor: "phone", label: "Telefone" },
     { valor: "email", label: "Email" },
@@ -107,15 +105,26 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
       void mostrarAlerta('Atenção', 'Selecione um departamento antes de adicionar perguntas!', 'aviso');
       return;
     }
+    
+    // DEBUG: verificar o tipo recebido
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('DEBUG adicionarPergunta - tipo recebido:', tipo);
+    }
+    
     const novaPergunta = {
       id: Date.now(),
       label: "",
       tipo: tipo,
       obrigatorio: false,
-      opcoes: tipo === "select" ? [""] : [],
+      opcoes: (tipo === "select" || tipo === "checkbox") ? [""] : [],
       ordem: (questionariosPorDept[departamentoSelecionado]?.length || 0) + 1,
       condicao: null
     };
+    
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('DEBUG adicionarPergunta - novaPergunta criada:', novaPergunta);
+    }
+    
     setEditandoPergunta(novaPergunta);
   };
 
@@ -123,6 +132,16 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
     if (!editandoPergunta.label.trim()) {
       void mostrarAlerta('Atenção', 'Digite o texto da pergunta!', 'aviso');
       return;
+    }
+
+    // DEBUG: verificar o tipo antes de salvar
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('DEBUG salvarPergunta - editandoPergunta:', {
+        id: editandoPergunta.id,
+        label: editandoPergunta.label,
+        tipo: editandoPergunta.tipo,
+        opcoes: editandoPergunta.opcoes,
+      });
     }
 
     const perguntasDepto = departamentoSelecionado !== null ? questionariosPorDept[departamentoSelecionado] || [] : [];
@@ -247,8 +266,6 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
         empresaId: empresaSelecionada.id,
         cliente: (responsavelSelecionado?.nome || '').trim(),
         responsavelId,
-        email,
-        telefone,
         fluxoDepartamentos,
         departamentoAtual: fluxoDepartamentos[0],
         departamentoAtualIndex: 0,
@@ -317,8 +334,6 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
                       setNomeEmpresa(emp.razao_social || emp.apelido || 'Empresa');
                       // Não preencher automaticamente o responsável com o nome da empresa
                       // (o usuário escolhe o responsável e o nome do serviço)
-                      setEmail(emp.email || '');
-                      setTelefone(emp.telefone || '');
                     }
                   }}
                   className="w-full px-4 py-3 border border-gray-300 dark:border-[var(--border)] rounded-xl focus:ring-2 focus:ring-cyan-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
@@ -658,7 +673,7 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
                               )}
                             </div>
 
-                            {editandoPergunta.tipo === "select" && (
+                            {(editandoPergunta.tipo === "select" || editandoPergunta.tipo === "checkbox") && (
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                   Opções de Resposta

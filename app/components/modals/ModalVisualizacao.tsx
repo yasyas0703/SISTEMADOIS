@@ -1,10 +1,14 @@
 'use client';
 
-import React from 'react';
-import { X, Calendar, CheckCircle, Star, ArrowRight, FileText, Eye, Download, MessageSquare, ArrowLeft, MoreHorizontal } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Calendar, CheckCircle, Star, ArrowRight, FileText, Eye, Download, MessageSquare, ArrowLeft, MoreHorizontal, Activity, FileDown } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import { formatarDataHora, formatarNomeArquivo } from '@/app/utils/helpers';
+import HistoricoTimeline from '@/app/components/HistoricoTimeline';
+import ChecklistDepartamento from '@/app/components/ChecklistDepartamento';
+import { buscarHistorico } from '@/app/utils/auditoria';
+import { exportarProcessoPDF } from '@/app/utils/exportarPDF';
 
 interface VisualizacaoCompletaProps {
   processo: any;
@@ -13,6 +17,50 @@ interface VisualizacaoCompletaProps {
 
 export default function VisualizacaoCompleta({ processo, onClose }: VisualizacaoCompletaProps) {
   const { departamentos, setShowPreviewDocumento, voltarParaDepartamentoAnterior, usuarioLogado, setShowQuestionario } = useSistema();
+  const [abaAtiva, setAbaAtiva] = useState('respostas');
+  const [historicoCompleto, setHistoricoCompleto] = useState<any[]>([]);
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+  const [exportando, setExportando] = useState(false);
+
+  // Carregar histórico completo quando a aba for selecionada
+  useEffect(() => {
+    if (abaAtiva === 'historico' && historicoCompleto.length === 0 && processo?.id) {
+      setCarregandoHistorico(true);
+      buscarHistorico(processo.id)
+        .then((dados) => setHistoricoCompleto(dados))
+        .catch((err) => console.error('Erro ao carregar histórico:', err))
+        .finally(() => setCarregandoHistorico(false));
+    }
+  }, [abaAtiva, processo?.id]);
+
+  // Função para exportar PDF
+  const handleExportarPDF = async () => {
+    try {
+      setExportando(true);
+      
+      // Buscar histórico se ainda não foi carregado
+      let historicoParaExportar = historicoCompleto;
+      if (historicoParaExportar.length === 0) {
+        historicoParaExportar = await buscarHistorico(processo.id);
+      }
+      
+      // Preparar dados do processo para exportação
+      const processoParaExportar = {
+        ...processo,
+        historicoEvento: historicoParaExportar,
+      };
+      
+      await exportarProcessoPDF(processoParaExportar, departamentos);
+      
+      // Sucesso
+      alert('✅ Relatório PDF gerado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error);
+      alert('❌ Erro ao gerar relatório PDF. Verifique o console para detalhes.');
+    } finally {
+      setExportando(false);
+    }
+  };
 
   const getIconeDepartamento = (icone: any) => {
     if (typeof icone === 'function') return icone;
@@ -88,6 +136,16 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportarPDF}
+                disabled={exportando}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Exportar relatório completo em PDF"
+              >
+                <FileDown size={18} />
+                {exportando ? 'Gerando PDF...' : 'Exportar PDF'}
+              </button>
+              
               {processo?.status !== 'finalizado' && (Number(processo?.departamentoAtualIndex ?? 0) > 0) && (
                 <button
                   onClick={async () => {
@@ -127,9 +185,56 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
             </div>
           </div>
 
-          {departamentosVisiveis.map((dept: any) => {
+          {/* Abas de Navegação */}
+          <div className="flex gap-4 border-b-2 border-gray-200 dark:border-[var(--border)]">
+            <button
+              onClick={() => setAbaAtiva('respostas')}
+              className={`pb-3 px-4 font-semibold text-sm transition-all border-b-2 -mb-0.5 ${
+                abaAtiva === 'respostas'
+                  ? 'border-green-500 text-green-600 dark:text-green-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              📋 Cadastro & Respostas
+            </button>
+            <button
+              onClick={() => setAbaAtiva('historico')}
+              className={`pb-3 px-4 font-semibold text-sm transition-all border-b-2 -mb-0.5 ${
+                abaAtiva === 'historico'
+                  ? 'border-green-500 text-green-600 dark:text-green-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              🕒 Histórico Completo
+            </button>
+            <button
+              onClick={() => setAbaAtiva('documentos')}
+              className={`pb-3 px-4 font-semibold text-sm transition-all border-b-2 -mb-0.5 ${
+                abaAtiva === 'documentos'
+                  ? 'border-green-500 text-green-600 dark:text-green-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              📎 Documentos
+            </button>
+          </div>
+
+          {/* Conteúdo das Abas */}
+          {abaAtiva === 'respostas' && (
+            <>
+              {departamentosVisiveis.map((dept: any) => {
             const respostasDept = respostasPorDept[dept.id];
-            const questionario = Array.isArray(respostasDept?.questionario) ? respostasDept.questionario : [];
+            
+            // Buscar questionários do processo para este departamento (incluindo os que não têm respostas)
+            let questionario = Array.isArray(respostasDept?.questionario) ? respostasDept.questionario : [];
+            
+            // Se não houver questionário em respostasDept, buscar em processo.questionariosPorDepartamento
+            if (questionario.length === 0 && processo?.questionariosPorDepartamento) {
+              const questDoDept = processo.questionariosPorDepartamento[dept.id];
+              if (Array.isArray(questDoDept)) {
+                questionario = questDoDept;
+              }
+            }
 
             const hasAlgumaResposta =
               !!respostasDept &&
@@ -142,8 +247,10 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
               return documentosDaPergunta(dept.id, numero(pergunta?.id)).length > 0;
             });
 
-            // Exibe o departamento se houver respostas OU anexos (perguntas tipo file)
-            const hasConteudo = questionario.length > 0 && (hasAlgumaResposta || hasAlgumAnexo);
+            const hasPerguntasFile = questionario.some((p: any) => p?.tipo === 'file');
+
+            // SEMPRE exibir se houver questionário (mesmo que seja só file sem resposta)
+            const hasConteudo = questionario.length > 0;
             if (!hasConteudo) return null;
 
             const IconeDept = getIconeDepartamento(dept.icone);
@@ -170,9 +277,10 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
                   </div>
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {respostasDept.questionario.map((pergunta: any) => {
+                  {questionario.map((pergunta: any) => {
                     if (pergunta?.tipo === 'file') {
                       const anexos = documentosDaPergunta(dept.id, numero(pergunta?.id));
+                      
                       if (!anexos.length) {
                         // Verificar se existem anexos no backend, mas são restritos para o usuário atual
                         const counts: Record<string, number> = (processo as any)?.documentosCounts ?? {};
@@ -183,7 +291,7 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
                           return (
                             <div key={pergunta.id} className="md:col-span-2">
                               <div className="bg-gray-50 dark:bg-[var(--muted)] rounded-lg p-4 border border-transparent dark:border-[var(--border)]">
-                                <label className="block text-sm font-medium text-gray-600 mb-3">{pergunta.label}</label>
+                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">{pergunta.label}</label>
                                 <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                                   <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
                                   <span>Respondido — anexo enviado (sem permissão para visualizar)</span>
@@ -192,7 +300,16 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
                             </div>
                           );
                         }
-                        return null;
+                        
+                        // Mostrar campo vazio mesmo sem anexos (para debug)
+                        return (
+                          <div key={pergunta.id} className="md:col-span-2">
+                            <div className="bg-gray-50 dark:bg-[var(--muted)] rounded-lg p-4 border border-transparent dark:border-[var(--border)]">
+                              <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">{pergunta.label}</label>
+                              <div className="text-sm text-gray-500 italic">Nenhum arquivo anexado</div>
+                            </div>
+                          </div>
+                        );
                       }
                       return (
                         <div key={pergunta.id} className="md:col-span-2">
@@ -238,17 +355,38 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
                       );
                     }
 
-                    const resposta = respostasDept.respostas?.[pergunta.id];
+                    const resposta = respostasDept?.respostas?.[pergunta.id];
                     if (resposta === undefined || resposta === null || String(resposta) === '') return null;
+                    
+                    // Tratamento especial para checkbox
+                    let respostaFormatada: any = resposta;
+                    if (pergunta.tipo === 'checkbox') {
+                      try {
+                        const valores = typeof resposta === 'string' ? JSON.parse(resposta) : resposta;
+                        respostaFormatada = Array.isArray(valores)
+                          ? valores
+                              .map((v: any) => {
+                                const s = String(v ?? '');
+                                const m = s.match(/^\d+\|(.*)$/);
+                                return m ? m[1] : s;
+                              })
+                              .filter((x: string) => x.trim())
+                              .join(', ')
+                          : String(resposta);
+                      } catch {
+                        respostaFormatada = String(resposta);
+                      }
+                    }
+                    
                     return (
                       <div key={pergunta.id} className={pergunta.tipo === 'textarea' ? 'md:col-span-2' : ''}>
                         <div className="bg-gray-50 dark:bg-[var(--muted)] rounded-lg p-4 border border-transparent dark:border-[var(--border)]">
                           <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">{pergunta.label}</label>
                           <div className="text-gray-800 dark:text-[var(--fg)]">
                             {pergunta.tipo === 'textarea' ? (
-                              <div className="whitespace-pre-wrap">{String(resposta)}</div>
+                              <div className="whitespace-pre-wrap">{String(respostaFormatada)}</div>
                             ) : (
-                              String(resposta)
+                              String(respostaFormatada)
                             )}
                           </div>
                         </div>
@@ -256,83 +394,91 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
                     );
                   })}
                 </div>
+
+                {/* Checklist de Validação */}
+                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-[var(--border)]">
+                  <ChecklistDepartamento
+                    questionarios={questionario}
+                    documentosObrigatorios={dept.documentosObrigatorios || []}
+                    respostas={respostasDept?.respostas || {}}
+                    documentos={documentos.map((d: any) => ({
+                      ...d,
+                      perguntaId: numero(d?.perguntaId ?? d?.pergunta_id),
+                      departamentoId: numero(d?.departamentoId ?? d?.departamento_id),
+                    }))}
+                    departamentoNome={dept.nome}
+                  />
+                </div>
               </div>
             );
           })}
+            </>
+          )}
 
-          <div className="bg-white dark:bg-[var(--card)] rounded-xl p-6 border border-gray-200 dark:border-[var(--border)] shadow-sm">
-            <h4 className="font-bold text-gray-800 dark:text-[var(--fg)] mb-4">Histórico Completo</h4>
-            <div className="space-y-4">
-              {(() => {
-                const historicoCompleto = (processo?.historico || processo?.historicoEvento || []) as any[];
-                const visibleDeptNames = new Set((departamentosVisiveis || []).map((d: any) => String(d?.nome)));
-                const historicoFiltrado = historicoCompleto.filter((item: any) => {
-                  // Mostrar eventos que não têm departamento associado (sistema) e
-                  // mostrar apenas eventos cujo departamento esteja entre os visíveis
-                  if (!item?.departamento) return true;
-                  return visibleDeptNames.has(String(item.departamento));
-                });
-
-                return historicoFiltrado.map((item: any, index: number) => (
-                  <div key={index} className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-[var(--muted)] rounded-xl border border-transparent dark:border-[var(--border)]">
-                    <div className="mt-1">
-                      {item.tipo === 'inicio' && <Calendar className="text-blue-500" size={16} />}
-                      {item.tipo === 'conclusao' && <CheckCircle className="text-green-500" size={16} />}
-                      {item.tipo === 'finalizacao' && <Star className="text-yellow-500" size={16} />}
-                      {item.tipo === 'movimentacao' && <ArrowRight className="text-purple-500" size={16} />}
-                      {item.tipo === 'documento' && <FileText className="text-cyan-600" size={16} />}
-                      {item.tipo === 'comentario' && <MessageSquare className="text-gray-600" size={16} />}
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 dark:text-[var(--fg)]">{item.acao}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                        <span className="bg-gray-200 dark:bg-[var(--card)] px-2 py-1 rounded border border-transparent dark:border-[var(--border)]">{item.departamento}</span>
-                        <span className="mx-2">•</span>
-                        <span>{item.responsavel}</span>
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">{formatarDataHora(item.data)}</div>
-                    </div>
-                  </div>
-                ));
-              })()}
+          {/* Aba Histórico Completo */}
+          {abaAtiva === 'historico' && (
+            <div className="bg-white dark:bg-[var(--card)] rounded-xl p-6 border border-gray-200 dark:border-[var(--border)] shadow-sm">
+              <div className="flex items-center gap-2 mb-6">
+                <Activity size={24} className="text-green-500" />
+                <h4 className="font-bold text-gray-800 dark:text-[var(--fg)] text-xl">
+                  Histórico Completo de Auditoria
+                </h4>
+              </div>
+              {carregandoHistorico ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto"></div>
+                  <p className="text-gray-500 dark:text-gray-400 mt-4">Carregando histórico...</p>
+                </div>
+              ) : (
+                <div className="max-h-[600px] overflow-y-auto">
+                  <HistoricoTimeline historico={historicoCompleto} />
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
-          <div className="bg-white dark:bg-[var(--card)] rounded-xl p-6 border border-gray-200 dark:border-[var(--border)] shadow-sm">
-            <h4 className="font-bold text-gray-800 dark:text-[var(--fg)] mb-4">Documentos do Processo</h4>
+          {/* Aba Documentos */}
+          {abaAtiva === 'documentos' && (
+            <div className="bg-white dark:bg-[var(--card)] rounded-xl p-6 border border-gray-200 dark:border-[var(--border)] shadow-sm">
+              <h4 className="font-bold text-gray-800 dark:text-[var(--fg)] mb-4">Documentos do Processo</h4>
 
-            {documentos.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {documentos.map((doc: any) => (
-                  <div key={doc.id} className="bg-gray-50 dark:bg-[var(--muted)] rounded-lg p-4 border border-gray-200 dark:border-[var(--border)]">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileText size={16} className="text-gray-400" />
-                        <span className="font-medium text-sm truncate max-w-[calc(100%-88px)]" title={doc.nome}>{formatarNomeArquivo(doc.nome)}</span>
+              {documentos.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {documentos.map((doc: any) => (
+                    <div key={doc.id} className="bg-gray-50 dark:bg-[var(--muted)] rounded-lg p-4 border border-gray-200 dark:border-[var(--border)]">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText size={16} className="text-gray-400" />
+                          <span className="font-medium text-sm truncate max-w-[calc(100%-88px)]" title={doc.nome}>{formatarNomeArquivo(doc.nome)}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => setShowPreviewDocumento(doc)} className="p-1 text-cyan-600 hover:bg-cyan-100 rounded">
+                            <Eye size={14} />
+                          </button>
+                          <a href={doc.url} download={doc.nome} className="p-1 text-gray-600 hover:bg-gray-100 dark:hover:bg-[var(--card)] rounded">
+                            <Download size={14} />
+                          </a>
+                        </div>
                       </div>
-                      <div className="flex gap-1">
-                        <button onClick={() => setShowPreviewDocumento(doc)} className="p-1 text-cyan-600 hover:bg-cyan-100 rounded">
-                          <Eye size={14} />
-                        </button>
-                        <a href={doc.url} download={doc.nome} className="p-1 text-gray-600 hover:bg-gray-100 dark:hover:bg-[var(--card)] rounded">
-                          <Download size={14} />
-                        </a>
+                      <div className="text-xs text-gray-500">
+                        {(Number(doc.tamanho || 0) / 1024 / 1024).toFixed(2)} MB
                       </div>
+                      <div className="text-xs text-gray-500">{formatarDataHora(doc.dataUpload)}</div>
                     </div>
-                    <div className="text-xs text-gray-500">
-                      {(Number(doc.tamanho || 0) / 1024 / 1024).toFixed(2)} MB
-                    </div>
-                    <div className="text-xs text-gray-500">{formatarDataHora(doc.dataUpload)}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <FileText size={48} className="mx-auto mb-4 opacity-30" />
-                <p>Nenhum documento enviado ainda</p>
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText size={48} className="mx-auto mb-4 opacity-30" />
+                  <p>Nenhum documento enviado ainda</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Histórico Resumido (para aba de respostas) - REMOVIDO DAQUI */}
+          {/* Documentos (para aba de respostas) - MOVIDO PARA ABA PRÓPRIA */}
+
         </div>
       </div>
     </div>

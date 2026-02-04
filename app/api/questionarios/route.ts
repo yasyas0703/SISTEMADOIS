@@ -16,6 +16,7 @@ const toTipoCampo = (tipo: any) => {
     case 'DATE':
     case 'BOOLEAN':
     case 'SELECT':
+    case 'CHECKBOX':
     case 'FILE':
     case 'PHONE':
     case 'EMAIL':
@@ -37,6 +38,9 @@ const toTipoCampo = (tipo: any) => {
           return 'BOOLEAN';
         case 'select':
           return 'SELECT';
+        case 'checkbox':
+        case 'checklist':
+          return 'CHECKBOX';
         case 'file':
           return 'FILE';
         case 'phone':

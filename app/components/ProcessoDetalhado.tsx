@@ -1,12 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X, MessageSquare, FileText, Eye, CheckCircle, Clock, Calendar,
   User, AlertCircle, Tag, ArrowRight, Trash2, MoreVertical,
   Upload, Download, Edit, Flag, Zap, Activity, ArrowLeft
 } from 'lucide-react';
 import { Processo } from '@/app/types';
+import HistoricoTimeline from './HistoricoTimeline';
+import { buscarHistorico } from '@/app/utils/auditoria';
+import { verificarMencoesNaoLidasPorNotificacoes } from '@/app/utils/mentions';
+import { useSistema } from '@/app/context/SistemaContext';
 
 interface ProcessoDetalhadoProps {
   processo: Processo;
@@ -33,7 +37,21 @@ export default function ProcessoDetalhado({
   onVoltar,
   onFinalizar,
 }: ProcessoDetalhadoProps) {
+  const { usuarioLogado, notificacoes } = useSistema();
   const [activeTab, setActiveTab] = useState('detalhes');
+  const [historicoCompleto, setHistoricoCompleto] = useState<any[]>([]);
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+
+  // Carregar histórico completo quando a aba for selecionada
+  useEffect(() => {
+    if (activeTab === 'historico' && historicoCompleto.length === 0) {
+      setCarregandoHistorico(true);
+      buscarHistorico(processo.id)
+        .then((dados) => setHistoricoCompleto(dados))
+        .catch((err) => console.error('Erro ao carregar histórico:', err))
+        .finally(() => setCarregandoHistorico(false));
+    }
+  }, [activeTab, processo.id]);
 
   const historico = ((processo as any)?.historico || (processo as any)?.historicoEvento || []) as any[];
   const ultimasAtividades = Array.isArray(historico) ? historico.slice(0, 3) : [];
@@ -157,91 +175,142 @@ export default function ProcessoDetalhado({
 
       {/* Conteúdo */}
       <div className="p-8 space-y-8">
-        {/* Informações Principais */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="border-l-4 border-blue-500 pl-4">
-            <p className="text-sm text-gray-600 mb-1">Cliente</p>
-            <p className="font-bold text-gray-800">{nomeEmpresa}</p>
-          </div>
-          <div className="border-l-4 border-green-500 pl-4">
-            <p className="text-sm text-gray-600 mb-1">Inicio</p>
-            <p className="font-bold text-gray-800">{formatarData(inicio)}</p>
-          </div>
-          <div className="border-l-4 border-orange-500 pl-4">
-            <p className="text-sm text-gray-600 mb-1">Prazo</p>
-            <p className="font-bold text-gray-800">{formatarData(prazo)}</p>
-          </div>
-        </div>
-
-        {/* Botões de Ação */}
-        <div className="flex items-center gap-3 flex-wrap bg-gray-50 dark:bg-[var(--muted)] p-6 rounded-xl">
+        {/* Abas */}
+        <div className="flex gap-4 border-b border-gray-200 dark:border-gray-700">
           <button
-            onClick={onVerCompleto}
-            className="px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold transition flex items-center gap-2"
+            onClick={() => setActiveTab('detalhes')}
+            className={`pb-3 px-4 font-semibold transition border-b-2 ${
+              activeTab === 'detalhes'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
           >
-            <Eye size={18} />
-            Ver Completo
+            📋 Detalhes
           </button>
           <button
-            onClick={onComentarios}
-            className="px-6 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-semibold transition flex items-center gap-2"
+            onClick={() => setActiveTab('historico')}
+            className={`pb-3 px-4 font-semibold transition border-b-2 ${
+              activeTab === 'historico'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
           >
-            <MessageSquare size={18} />
-            Comentários ({comentariosCount})
-          </button>
-          <button
-            onClick={onQuestionario}
-            className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition flex items-center gap-2"
-          >
-            <FileText size={18} />
-            Ver Questionário
-          </button>
-          <button
-            onClick={onDocumentos}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition flex items-center gap-2"
-          >
-            <Upload size={18} />
-            Documentos ({documentosCount})
-          </button>
-          <button className="px-4 py-2 text-gray-600 hover:text-gray-800">
-            <X size={20} />
+            🕒 Histórico Completo
           </button>
         </div>
 
-        {/* Últimas Atividades */}
-        <div className="bg-gray-50 dark:bg-[var(--muted)] p-6 rounded-xl">
-          <div className="flex items-center gap-2 mb-4">
-            <Activity size={20} className="text-orange-500" />
-            <h3 className="font-bold text-gray-800 dark:text-[var(--fg)]">Últimas Atividades</h3>
-          </div>
-          <div className="space-y-4">
-            {ultimasAtividades.length === 0 ? (
-              <div className="text-sm text-gray-500">Sem atividades registradas ainda.</div>
+        {/* Conteúdo das Abas */}
+        {activeTab === 'detalhes' && (
+          <>
+            {/* Informações Principais */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="border-l-4 border-blue-500 pl-4">
+                <p className="text-sm text-gray-600 mb-1">Cliente</p>
+                <p className="font-bold text-gray-800">{nomeEmpresa}</p>
+              </div>
+              <div className="border-l-4 border-green-500 pl-4">
+                <p className="text-sm text-gray-600 mb-1">Inicio</p>
+                <p className="font-bold text-gray-800">{formatarData(inicio)}</p>
+              </div>
+              <div className="border-l-4 border-orange-500 pl-4">
+                <p className="text-sm text-gray-600 mb-1">Prazo</p>
+                <p className="font-bold text-gray-800">{formatarData(prazo)}</p>
+              </div>
+            </div>
+
+            {/* Botões de Ação */}
+            <div className="flex items-center gap-3 flex-wrap bg-gray-50 dark:bg-[var(--muted)] p-6 rounded-xl">
+              <button
+                onClick={onVerCompleto}
+                className="px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold transition flex items-center gap-2"
+              >
+                <Eye size={18} />
+                Ver Completo
+              </button>
+              <button
+                onClick={onComentarios}
+                className="px-6 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-semibold transition flex items-center gap-2 relative"
+              >
+                <MessageSquare size={18} />
+                Comentários ({comentariosCount})
+                {verificarMencoesNaoLidasPorNotificacoes(notificacoes as any, processo.id) && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+                )}
+              </button>
+              <button
+                onClick={onQuestionario}
+                className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition flex items-center gap-2"
+              >
+                <FileText size={18} />
+                Ver Questionário
+              </button>
+              <button
+                onClick={onDocumentos}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition flex items-center gap-2"
+              >
+                <Upload size={18} />
+                Documentos ({documentosCount})
+              </button>
+              <button className="px-4 py-2 text-gray-600 hover:text-gray-800">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Últimas Atividades */}
+            <div className="bg-gray-50 dark:bg-[var(--muted)] p-6 rounded-xl">
+              <div className="flex items-center gap-2 mb-4">
+                <Activity size={20} className="text-orange-500" />
+                <h3 className="font-bold text-gray-800 dark:text-[var(--fg)]">Últimas Atividades</h3>
+              </div>
+              <div className="space-y-4">
+                {ultimasAtividades.length === 0 ? (
+                  <div className="text-sm text-gray-500">Sem atividades registradas ainda.</div>
+                ) : (
+                  ultimasAtividades.map((item: any, idx: number) => (
+                    <div key={idx} className="flex items-start gap-3">
+                      {item.tipo === 'finalizacao' ? (
+                        <CheckCircle size={18} className="text-green-500 mt-1 flex-shrink-0" />
+                      ) : item.tipo === 'movimentacao' ? (
+                        <ArrowRight size={18} className="text-blue-500 mt-1 flex-shrink-0" />
+                      ) : item.tipo === 'documento' ? (
+                        <FileText size={18} className="text-cyan-600 mt-1 flex-shrink-0" />
+                      ) : item.tipo === 'comentario' ? (
+                        <MessageSquare size={18} className="text-gray-600 mt-1 flex-shrink-0" />
+                      ) : (
+                        <Activity size={18} className="text-orange-500 mt-1 flex-shrink-0" />
+                      )}
+                      <div>
+                        <p className="font-semibold text-gray-800 dark:text-[var(--fg)]">{item.acao}</p>
+                        <p className="text-sm text-gray-500">
+                          {(item.responsavel || '—') + (item.data ? ` • ${new Date(item.data).toLocaleString('pt-BR')}` : '')}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'historico' && (
+          <div className="bg-gray-50 dark:bg-[var(--muted)] p-6 rounded-xl max-h-[500px] overflow-y-auto">
+            <div className="flex items-center gap-2 mb-6">
+              <Activity size={24} className="text-blue-500" />
+              <h3 className="font-bold text-gray-800 dark:text-[var(--fg)] text-xl">
+                Histórico Completo de Auditoria
+              </h3>
+            </div>
+            {carregandoHistorico ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                <p className="text-gray-500 mt-4">Carregando histórico...</p>
+              </div>
             ) : (
-              ultimasAtividades.map((item: any, idx: number) => (
-                <div key={idx} className="flex items-start gap-3">
-                  {item.tipo === 'finalizacao' ? (
-                    <CheckCircle size={18} className="text-green-500 mt-1 flex-shrink-0" />
-                  ) : item.tipo === 'movimentacao' ? (
-                    <ArrowRight size={18} className="text-blue-500 mt-1 flex-shrink-0" />
-                  ) : item.tipo === 'documento' ? (
-                    <FileText size={18} className="text-cyan-600 mt-1 flex-shrink-0" />
-                  ) : item.tipo === 'comentario' ? (
-                    <MessageSquare size={18} className="text-gray-600 mt-1 flex-shrink-0" />
-                  ) : (
-                    <Activity size={18} className="text-orange-500 mt-1 flex-shrink-0" />
-                  )}
-                  <div>
-                    <p className="font-semibold text-gray-800 dark:text-[var(--fg)]">{item.acao}</p>
-                    <p className="text-sm text-gray-500">
-                      {(item.responsavel || '—') + (item.data ? ` • ${new Date(item.data).toLocaleString('pt-BR')}` : '')}
-                    </p>
-                  </div>
-                </div>
-              ))
+              <HistoricoTimeline historico={historicoCompleto} />
             )}
           </div>
-        </div>
+        )}
 
         {/* Botões de Ação Finais */}
         {processo.status !== 'finalizado' && (

@@ -87,6 +87,7 @@ export interface Notificacao {
   lida: boolean;
   origem?: 'db' | 'local';
   link?: string | null;
+  processoId?: number | null;
 }
 
 export interface Comentario {
@@ -94,12 +95,15 @@ export interface Comentario {
   processoId: number;
   texto: string;
   autor: string;
+  autorId?: number;
   departamentoId?: number;
   departamento?: string;
   timestamp: Date | string;
   editado: boolean;
   editadoEm?: Date | string;
   mencoes?: string[];
+  parentId?: number | null;
+  respostas?: Comentario[];
 }
 
 export interface Documento {
@@ -125,7 +129,7 @@ export interface DocumentoObrigatorio {
 export interface Questionario {
   id: number;
   label: string;
-  tipo: 'text' | 'textarea' | 'number' | 'date' | 'boolean' | 'select' | 'file' | 'phone' | 'email';
+  tipo: 'text' | 'textarea' | 'number' | 'date' | 'boolean' | 'select' | 'checkbox' | 'file' | 'phone' | 'email';
   obrigatorio: boolean;
   opcoes?: string[];
   ordem?: number;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/utils/prisma';
 import { requireAuth } from '@/app/utils/routeAuth';
+import { validarAvancoDepartamento } from '@/app/utils/validation';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -22,13 +23,19 @@ export async function POST(
     
     const processoId = parseInt(params.id);
     
-    // Buscar processo
+    // Buscar processo completo com todas as informações para validação
     const processo = await prisma.processo.findUnique({
       where: { id: processoId },
       include: {
         historicoFluxos: {
           orderBy: { ordem: 'desc' },
           take: 1,
+        },
+        documentos: true,
+        questionarios: {
+          include: {
+            respostas: true,
+          },
         },
       },
     });
@@ -63,17 +70,88 @@ export async function POST(
     const proximoDepartamentoId = processo.fluxoDepartamentos[proximoIndex];
     const departamentoAtual = await prisma.departamento.findUnique({
       where: { id: processo.departamentoAtual },
+      include: {
+        documentosObrigatorios: true,
+      },
     });
     const proximoDepartamento = await prisma.departamento.findUnique({
       where: { id: proximoDepartamentoId },
     });
     
-    if (!proximoDepartamento) {
+    if (!proximoDepartamento || !departamentoAtual) {
       return NextResponse.json(
-        { error: 'Próximo departamento não encontrado' },
+        { error: 'Departamento não encontrado' },
         { status: 404 }
       );
     }
+    
+    // ============================================
+    // VALIDAR REQUISITOS ANTES DE AVANÇAR
+    // ============================================
+    
+    try {
+      // Buscar questionários do departamento atual
+      const questionarios = await prisma.questionarioDepartamento.findMany({
+        where: {
+          processoId: processoId,
+          departamentoId: departamentoAtual.id,
+        },
+        orderBy: { ordem: 'asc' },
+      });
+
+      // Montar respostas do departamento atual
+      const respostasMap: Record<number, any> = {};
+      const respostasQuestionario = await prisma.respostaQuestionario.findMany({
+        where: {
+          processoId: processoId,
+          questionario: {
+            departamentoId: departamentoAtual.id,
+          },
+        },
+      });
+      
+      for (const respQuest of respostasQuestionario) {
+        // `RespostaQuestionario` armazena a resposta como string (JSON quando necessário)
+        respostasMap[respQuest.questionarioId] = respQuest.resposta;
+      }
+
+      // Validar se todos os requisitos estão completos (somente se houver questionários ou documentos obrigatórios)
+      if (questionarios.some(q => q.obrigatorio) || (departamentoAtual.documentosObrigatorios && departamentoAtual.documentosObrigatorios.length > 0)) {
+        const validacao = validarAvancoDepartamento({
+          processo,
+          departamento: departamentoAtual,
+          questionarios: questionarios.map(q => ({
+            id: q.id,
+            label: q.label || 'Pergunta',
+            tipo: q.tipo as any || 'text',
+            obrigatorio: q.obrigatorio || false,
+            opcoes: Array.isArray(q.opcoes) ? q.opcoes : [],
+          })),
+          documentos: processo.documentos || [],
+          respostas: respostasMap,
+        });
+
+        if (!validacao.valido) {
+          // Retornar erros de validação
+          const errosCriticos = validacao.erros.filter(e => e.tipo === 'erro');
+          return NextResponse.json(
+            {
+              error: 'Requisitos obrigatórios não preenchidos',
+              detalhes: errosCriticos.map(e => e.mensagem),
+              validacao: validacao.erros,
+            },
+            { status: 400 }
+          );
+        }
+      }
+    } catch (validacaoError) {
+      // Se a validação falhar, apenas logar e continuar (não bloquear o avanço)
+      console.error('Erro na validação (não bloqueante):', validacaoError);
+    }
+    
+    // ============================================
+    // VALIDAÇÃO PASSOU - AVANÇAR PROCESSO
+    // ============================================
     
     // Atualizar processo
     const processoAtualizado = await prisma.processo.update({

@@ -243,6 +243,8 @@ export async function POST(request: NextRequest) {
           return 'BOOLEAN';
         case 'select':
           return 'SELECT';
+        case 'checkbox':
+          return 'CHECKBOX';
         case 'file':
           return 'FILE';
         case 'phone':

@@ -20,6 +20,7 @@ const TIPOS_CAMPO: Array<{ valor: Questionario['tipo']; label: string }> = [
   { valor: 'date', label: 'Data' },
   { valor: 'boolean', label: 'Sim/Não' },
   { valor: 'select', label: 'Seleção Única' },
+  { valor: 'checkbox', label: 'Checklist' },
   { valor: 'file', label: 'Arquivo/Anexo' },
   { valor: 'phone', label: 'Telefone' },
   { valor: 'email', label: 'Email' },
@@ -57,7 +58,7 @@ export default function ModalEditarQuestionarioSolicitacao({
       label: '',
       tipo,
       obrigatorio: false,
-      opcoes: tipo === 'select' ? [''] : undefined,
+      opcoes: (tipo === 'select' || tipo === 'checkbox') ? [''] : undefined,
       ordem: perguntas.length + 1,
     });
   };
@@ -72,7 +73,7 @@ export default function ModalEditarQuestionarioSolicitacao({
     const normalizada: Questionario = {
       ...editando,
       opcoes:
-        editando.tipo === 'select'
+        (editando.tipo === 'select' || editando.tipo === 'checkbox')
           ? (editando.opcoes || []).map((o) => String(o || '').trim()).filter(Boolean)
           : undefined,
     };
@@ -194,7 +195,7 @@ export default function ModalEditarQuestionarioSolicitacao({
                       setEditando({
                         ...editando,
                         tipo,
-                        opcoes: tipo === 'select' ? editando.opcoes || [''] : undefined,
+                        opcoes: (tipo === 'select' || tipo === 'checkbox') ? editando.opcoes || [''] : undefined,
                       });
                     }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500"
@@ -219,7 +220,7 @@ export default function ModalEditarQuestionarioSolicitacao({
                   </label>
                 </div>
 
-                {editando.tipo === 'select' && (
+                {(editando.tipo === 'select' || editando.tipo === 'checkbox') && (
                   <div className="md:col-span-2">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Opções</label>
                     <div className="space-y-2">
@@ -301,7 +302,7 @@ export default function ModalEditarQuestionarioSolicitacao({
                         <div className="text-xs text-gray-600 mt-1">
                           Tipo: {p.tipo} {p.obrigatorio ? '• Obrigatória' : ''}
                         </div>
-                        {p.tipo === 'select' && p.opcoes && p.opcoes.length > 0 && (
+                        {(p.tipo === 'select' || p.tipo === 'checkbox') && p.opcoes && p.opcoes.length > 0 && (
                           <div className="text-xs text-gray-600 mt-1 truncate" title={p.opcoes.join(', ')}>
                             Opções: {p.opcoes.join(', ')}
                           </div>
@@ -310,7 +311,7 @@ export default function ModalEditarQuestionarioSolicitacao({
                       <div className="flex gap-2 flex-shrink-0">
                         <button
                           type="button"
-                          onClick={() => setEditando({ ...p, opcoes: p.opcoes || (p.tipo === 'select' ? [''] : undefined) })}
+                          onClick={() => setEditando({ ...p, opcoes: p.opcoes || ((p.tipo === 'select' || p.tipo === 'checkbox') ? [''] : undefined) })}
                           className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 text-sm font-medium"
                         >
                           Editar

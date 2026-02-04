@@ -355,6 +355,7 @@ export function SistemaProvider({ children }: { children: React.ReactNode }) {
           lida: Boolean(n.lida),
           origem: 'db',
           link: n.link ?? null,
+          processoId: (typeof n.processoId === 'number' ? Number(n.processoId) : n.processoId ?? null) as any,
         } as Notificacao;
       })
       .filter(n => Number.isFinite(n.id));
@@ -1254,6 +1255,90 @@ useEffect(() => {
   const finalizarProcesso = useCallback(async (processoId: number) => {
     try {
       setGlobalLoading(true);
+      
+      // ============================================
+      // VALIDAR REQUISITOS ANTES DE FINALIZAR
+      // ============================================
+      
+      // Buscar processo COMPLETO da API (não do estado)
+      const processoCompleto = await api.getProcesso(processoId);
+      
+      console.log('=== DEBUG FINALIZAR ===');
+      console.log('Processo:', processoCompleto);
+      console.log('Departamento atual:', processoCompleto.departamentoAtual);
+      
+      // Buscar departamento atual
+      const departamentoAtual = departamentos.find(d => d.id === processoCompleto.departamentoAtual);
+      
+      console.log('Departamento encontrado:', departamentoAtual);
+      
+      if (departamentoAtual) {
+        // Buscar questionários do departamento atual
+        const questionarios = processoCompleto.questionariosPorDepartamento?.[departamentoAtual.id] || [];
+        const documentos = processoCompleto.documentos || [];
+        const respostas = processoCompleto.respostasHistorico?.[departamentoAtual.id]?.respostas || {};
+        
+        console.log('Questionários:', questionarios);
+        console.log('Documentos:', documentos.length);
+        console.log('Respostas:', respostas);
+        console.log('Docs obrigatórios:', departamentoAtual.documentosObrigatorios);
+        
+        // Verificar se há itens obrigatórios pendentes
+        const perguntasObrigatorias = questionarios.filter((q: any) => q.obrigatorio);
+        const documentosObrigatorios = departamentoAtual.documentosObrigatorios || [];
+        
+        console.log('Perguntas obrigatórias:', perguntasObrigatorias.length);
+        console.log('Docs obrigatórios:', documentosObrigatorios.length);
+        
+        if (perguntasObrigatorias.length > 0 || documentosObrigatorios.length > 0) {
+          // Importar função de validação
+          const { validarAvancoDepartamento } = await import('@/app/utils/validation');
+          
+          const validacao = validarAvancoDepartamento({
+            processo: processoCompleto as any,
+            departamento: departamentoAtual,
+            questionarios: questionarios.map((q: any) => ({
+              id: q.id,
+              label: q.label || 'Pergunta',
+              tipo: q.tipo || 'text',
+              obrigatorio: q.obrigatorio || false,
+              opcoes: Array.isArray(q.opcoes) ? q.opcoes : [],
+            })),
+            documentos: documentos,
+            respostas: respostas,
+          });
+          
+          console.log('Resultado validação:', validacao);
+          
+          if (!validacao.valido) {
+            const errosCriticos = validacao.erros.filter(e => e.tipo === 'erro');
+            const mensagem = errosCriticos.map(e => e.mensagem).join('\n');
+            
+            console.log('BLOQUEANDO FINALIZAÇÃO:', mensagem);
+            
+            // Remover loading ANTES de mostrar alerta
+            setGlobalLoading(false);
+            
+            // Mostrar alerta visual
+            await mostrarAlerta(
+              'Requisitos Obrigatórios Pendentes',
+              `Complete os seguintes itens antes de finalizar:\n\n${mensagem}`,
+              'erro'
+            );
+            
+            return; // Não lançar erro, apenas retornar
+          }
+        } else {
+          console.log('Sem itens obrigatórios, finalizando...');
+        }
+      }
+      
+      console.log('======================');
+      
+      // ============================================
+      // VALIDAÇÃO PASSOU - FINALIZAR PROCESSO
+      // ============================================
+      
       await api.atualizarProcesso(processoId, {
         status: 'FINALIZADO' as any,
         dataFinalizacao: new Date(),
@@ -1266,12 +1351,13 @@ useEffect(() => {
       
       adicionarNotificacao('Processo finalizado com sucesso', 'sucesso');
     } catch (error: any) {
+      console.error('Erro ao finalizar:', error);
       adicionarNotificacao(error.message || 'Erro ao finalizar processo', 'erro');
       throw error;
     } finally {
       setGlobalLoading(false);
     }
-  }, [adicionarNotificacao]);
+  }, [adicionarNotificacao, departamentos, mostrarAlerta]);
 
   const aplicarTagsProcesso = useCallback(async (processoId: number, novasTags: number[]) => {
     try {

@@ -15,6 +15,7 @@ import { Processo } from '@/app/types';
 import { useSistema } from '@/app/context/SistemaContext';
 import { formatarData } from '@/app/utils/helpers';
 import { temPermissao as temPermissaoSistema } from '@/app/utils/permissions';
+import { verificarMencoesNaoLidasPorNotificacoes } from '@/app/utils/mentions';
 
 interface ProcessoCardProps {
   processo: Processo;
@@ -43,7 +44,7 @@ export default function ProcessoCard({
   onVerDetalhes,
   onDragStart,
 }: ProcessoCardProps) {
-  const { tags, atualizarProcesso, usuarioLogado, mostrarAlerta } = useSistema();
+  const { tags, atualizarProcesso, usuarioLogado, mostrarAlerta, notificacoes } = useSistema();
 
   const departamentoUsuario =
     typeof (usuarioLogado as any)?.departamentoId === 'number'
@@ -199,12 +200,15 @@ export default function ProcessoCard({
                 e.stopPropagation();
                 onComentarios(processo);
               }}
-              className="bg-purple-100 text-purple-700 px-2 py-1 rounded-lg text-xs hover:bg-purple-200 transition-colors flex items-center gap-1 flex-shrink-0"
+              className="bg-purple-100 text-purple-700 px-2 py-1 rounded-lg text-xs hover:bg-purple-200 transition-colors flex items-center gap-1 flex-shrink-0 relative"
               title="Comentários"
             >
               <MessageSquare size={10} />
               {(((processo as any).comentariosCount ?? (processo.comentarios || []).length) as number) > 0 && (
                 <span className="text-[10px]">({(processo as any).comentariosCount ?? (processo.comentarios || []).length})</span>
+              )}
+              {verificarMencoesNaoLidasPorNotificacoes(notificacoes as any, processo.id) && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-white animate-pulse" />
               )}
             </button>
           )}

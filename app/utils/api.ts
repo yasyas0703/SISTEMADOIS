@@ -43,7 +43,7 @@ const normalizePrioridade = (prioridade: any) => {
 
 const normalizeTipoCampo = (
   tipo: any
-): 'text' | 'textarea' | 'number' | 'date' | 'boolean' | 'select' | 'file' | 'phone' | 'email' => {
+): 'text' | 'textarea' | 'number' | 'date' | 'boolean' | 'select' | 'checkbox' | 'file' | 'phone' | 'email' => {
   const t = typeof tipo === 'string' ? tipo.toLowerCase() : '';
   switch (t) {
     case 'text':
@@ -71,6 +71,9 @@ const normalizeTipoCampo = (
     case 'select':
     case 'selecao':
       return 'select';
+    case 'checkbox':
+    case 'checklist':
+      return 'checkbox';
     case 'file':
     case 'arquivo':
       return 'file';
@@ -95,6 +98,8 @@ const normalizeTipoCampo = (
           return 'boolean';
         case 'SELECT':
           return 'select';
+        case 'CHECKBOX':
+          return 'checkbox';
         case 'FILE':
           return 'file';
         case 'PHONE':
@@ -796,12 +801,14 @@ export const api = {
         processoId: c.processoId,
         texto: c.texto,
         autor: c.autor?.nome ?? c.autor ?? '—',
+        autorId: c.autor?.id ?? c.autorId ?? undefined,
         departamentoId: c.departamentoId ?? undefined,
         departamento: c.departamento?.nome ?? c.departamento ?? undefined,
         timestamp: c.criadoEm ?? c.timestamp ?? new Date().toISOString(),
         editado: Boolean(c.editado),
         editadoEm: c.editadoEm ?? undefined,
         mencoes: Array.isArray(c.mencoes) ? c.mencoes : [],
+        parentId: c.parentId ?? null,
       }));
     } catch (error) {
       console.error('Erro ao carregar comentários:', error);
@@ -824,12 +831,14 @@ export const api = {
         processoId: c.processoId,
         texto: c.texto,
         autor: c.autor?.nome ?? c.autor ?? '—',
+        autorId: c.autor?.id ?? c.autorId ?? undefined,
         departamentoId: c.departamentoId ?? undefined,
         departamento: c.departamento?.nome ?? c.departamento ?? undefined,
         timestamp: c.criadoEm ?? c.timestamp ?? new Date().toISOString(),
         editado: Boolean(c.editado),
         editadoEm: c.editadoEm ?? undefined,
         mencoes: Array.isArray(c.mencoes) ? c.mencoes : [],
+        parentId: c.parentId ?? null,
       };
     } catch (error) {
       console.error('Erro ao salvar comentário:', error);

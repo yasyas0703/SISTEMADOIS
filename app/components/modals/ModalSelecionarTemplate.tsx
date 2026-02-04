@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, FileText, Info, MoreVertical, Trash2, Mail, Phone, ClipboardList } from 'lucide-react';
+import { X, FileText, Info, MoreVertical, Trash2, ClipboardList } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import { Template } from '@/app/types';
 import { api } from '@/app/utils/api';
@@ -338,12 +338,6 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
                   <p className="text-gray-600">📄 CNPJ: {empresaSelecionada.cnpj}</p>
                   {responsavelSelecionado?.nome && (
                     <p className="text-gray-600">👤 Responsável: {responsavelSelecionado.nome}</p>
-                  )}
-                  {empresaSelecionada.email && (
-                    <p className="text-gray-600 flex items-center gap-2"><Mail size={14} /> {empresaSelecionada.email}</p>
-                  )}
-                  {empresaSelecionada.telefone && (
-                    <p className="text-gray-600 flex items-center gap-2"><Phone size={14} /> {empresaSelecionada.telefone}</p>
                   )}
                 </div>
               </div>

@@ -50,14 +50,26 @@ export async function POST(request: NextRequest) {
     
     const data = await request.json();
     
+    // Dados base do comentário
+    const comentarioData: any = {
+      processoId: data.processoId,
+      texto: data.texto,
+      autorId: user.id,
+      departamentoId: data.departamentoId,
+      mencoes: data.mencoes || [],
+    };
+    
+    // Adicionar parentId apenas se existir e se o campo existir no schema
+    if (data.parentId) {
+      try {
+        comentarioData.parentId = data.parentId;
+      } catch (e) {
+        console.warn('Campo parentId não disponível no schema. Execute: npx prisma migrate dev');
+      }
+    }
+    
     const comentario = await prisma.comentario.create({
-      data: {
-        processoId: data.processoId,
-        texto: data.texto,
-        autorId: user.id,
-        departamentoId: data.departamentoId,
-        mencoes: data.mencoes || [],
-      },
+      data: comentarioData,
       include: {
         autor: {
           select: { id: true, nome: true, email: true },
@@ -78,6 +90,108 @@ export async function POST(request: NextRequest) {
         dataTimestamp: BigInt(Date.now()),
       },
     });
+
+    // Se for uma resposta (parentId), notifica o autor do comentário pai
+    if (Number.isFinite(Number(data.parentId))) {
+      try {
+        const parentId = Number(data.parentId);
+        const parent = await prisma.comentario.findUnique({
+          where: { id: parentId },
+          select: { id: true, autorId: true, processoId: true },
+        });
+
+        // Só notifica se existir, for do mesmo processo, e não for o próprio autor
+        if (parent && Number(parent.processoId) === Number(data.processoId) && Number(parent.autorId) !== Number(user.id)) {
+          const processo = await prisma.processo.findUnique({
+            where: { id: data.processoId },
+            include: {
+              empresa: {
+                select: { razao_social: true, apelido: true, codigo: true },
+              },
+            },
+          });
+
+          const nomeEmpresa = processo?.empresa
+            ? (processo.empresa.apelido || processo.empresa.razao_social || processo.empresa.codigo)
+            : `Processo #${data.processoId}`;
+
+          await prisma.notificacao.create({
+            data: {
+              usuarioId: parent.autorId,
+              mensagem: `${user.nome} respondeu seu comentário no processo ${nomeEmpresa}`,
+              tipo: 'INFO',
+              processoId: data.processoId,
+              link: `/processos/${data.processoId}`,
+            },
+          });
+        }
+      } catch (notifReplyError) {
+        console.error('Erro ao criar notificação de resposta:', notifReplyError);
+        // Não falhar o comentário se notificação falhar
+      }
+    }
+
+    // Criar notificações para usuários mencionados
+    if (data.mencoes && Array.isArray(data.mencoes) && data.mencoes.length > 0) {
+      try {
+        // Buscar processo para pegar nome da empresa
+        const processo = await prisma.processo.findUnique({
+          where: { id: data.processoId },
+          include: {
+            empresa: {
+              select: { razao_social: true, apelido: true, codigo: true },
+            },
+          },
+        });
+
+        const nomeEmpresa = processo?.empresa
+          ? (processo.empresa.apelido || processo.empresa.razao_social || processo.empresa.codigo)
+          : `Processo #${data.processoId}`;
+
+        const normalizarNome = (s: unknown) =>
+          String(s ?? '')
+            .replace(/^@/, '')
+            .replace(/_/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // Extrair nomes de usuários das menções (formato @nome_usuario)
+        const nomesMencionados = Array.from(
+          new Set((data.mencoes as any[]).map(normalizarNome).filter(Boolean))
+        );
+
+        // Buscar usuários mencionados (case-insensitive)
+        // Obs: evita falhas comuns por diferença de maiúsculas/minúsculas e espaços.
+        const usuariosMencionados = nomesMencionados.length
+          ? await prisma.usuario.findMany({
+              where: {
+                id: { not: user.id }, // Não notificar o próprio autor
+                OR: nomesMencionados.map((nome: string) => ({
+                  nome: { equals: nome, mode: 'insensitive' },
+                })),
+              },
+            })
+          : [];
+
+        // Criar notificações
+        await Promise.all(
+          usuariosMencionados.map((usuario) =>
+            prisma.notificacao.create({
+              data: {
+                usuarioId: usuario.id,
+                mensagem: `${user.nome} mencionou você em um comentário no processo ${nomeEmpresa}`,
+                tipo: 'INFO',
+                processoId: data.processoId,
+                link: `/processos/${data.processoId}`,
+              },
+            })
+          )
+        );
+      } catch (notifError) {
+        console.error('Erro ao criar notificações de menção:', notifError);
+        // Não falhar o comentário se notificação falhar
+      }
+    }
     
     return NextResponse.json(comentario, { status: 201 });
   } catch (error) {

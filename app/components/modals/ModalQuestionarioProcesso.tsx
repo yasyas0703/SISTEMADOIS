@@ -399,6 +399,17 @@ export default function ModalQuestionarioProcesso({
     const valor = respostas[k];
     const isEmpty = valor === undefined || valor === null || valor === '';
 
+    // DEBUG: log do tipo da pergunta
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('DEBUG renderCampo:', { 
+        id: pergunta.id, 
+        label: pergunta.label, 
+        tipo: pergunta.tipo, 
+        tipoOf: typeof pergunta.tipo,
+        opcoes: pergunta.opcoes 
+      });
+    }
+
     switch (pergunta.tipo) {
       case 'text':
         return bloqueado ? (
@@ -663,6 +674,137 @@ export default function ModalQuestionarioProcesso({
             ))}
           </select>
         );
+
+      case 'checkbox': {
+        const opcoes = (pergunta.opcoes || []).map((o) => String(o ?? '').trim()).filter((o) => o.length > 0);
+
+        // Para evitar o bug de marcar várias opções iguais (ou “marcar uma e marcar outra junto”),
+        // salvamos a seleção como tokens estáveis: "idx|label".
+        const tokenFor = (idx: number, label: string) => `${idx}|${label}`;
+        const stripToken = (t: string) => {
+          const m = String(t).match(/^\d+\|(.*)$/);
+          return m ? m[1] : String(t);
+        };
+
+        const parseSelecionados = (raw: any): { tokens: Set<string>; labels: Set<string>; indices: Set<number> } => {
+          const tokens = new Set<string>();
+          const labels = new Set<string>();
+          const indices = new Set<number>();
+          try {
+            const parsed = typeof raw === 'string' && raw ? JSON.parse(raw) : raw;
+            if (Array.isArray(parsed)) {
+              for (const item of parsed) {
+                if (typeof item === 'number' && Number.isFinite(item)) {
+                  indices.add(item);
+                  continue;
+                }
+                const s = String(item ?? '');
+                if (!s) continue;
+                if (/^\d+\|/.test(s)) tokens.add(s);
+                else labels.add(s);
+              }
+            } else if (typeof raw === 'string' && raw.trim()) {
+              // legado: string simples
+              labels.add(raw.trim());
+            }
+          } catch {
+            // legado: string simples não-JSON
+            if (typeof raw === 'string' && raw.trim()) labels.add(raw.trim());
+          }
+          return { tokens, labels, indices };
+        };
+
+        const selecionados = parseSelecionados(valor);
+
+        const isChecked = (idx: number, label: string) => {
+          if (selecionados.indices.has(idx)) return true;
+          if (selecionados.tokens.has(tokenFor(idx, label))) return true;
+          return selecionados.labels.has(label);
+        };
+
+        const formatSelecionados = () => {
+          const out: string[] = [];
+          if (selecionados.tokens.size > 0) {
+            for (let i = 0; i < opcoes.length; i++) {
+              const lab = opcoes[i];
+              if (selecionados.tokens.has(tokenFor(i, lab))) out.push(lab);
+            }
+            return out.join(', ');
+          }
+          if (selecionados.indices.size > 0) {
+            const idxs = Array.from(selecionados.indices).sort((a, b) => a - b);
+            for (const i of idxs) {
+              if (i >= 0 && i < opcoes.length) out.push(opcoes[i]);
+            }
+            return out.join(', ');
+          }
+          // legado
+          for (const lab of opcoes) {
+            if (selecionados.labels.has(lab)) out.push(lab);
+          }
+          return out.join(', ');
+        };
+
+        const toggleOpcao = (idx: number) => {
+          setRespostas((prev) => {
+            const rawAtual = prev[String(pergunta.id)];
+            const atualParsed = parseSelecionados(rawAtual);
+
+            // Normaliza estado atual sempre para tokens
+            const tokenSet = new Set<string>();
+            if (atualParsed.tokens.size > 0) {
+              for (const t of atualParsed.tokens) tokenSet.add(t);
+            } else if (atualParsed.indices.size > 0) {
+              for (const i of atualParsed.indices) {
+                if (i >= 0 && i < opcoes.length) tokenSet.add(tokenFor(i, opcoes[i]));
+              }
+            } else if (atualParsed.labels.size > 0) {
+              for (let i = 0; i < opcoes.length; i++) {
+                if (atualParsed.labels.has(opcoes[i])) tokenSet.add(tokenFor(i, opcoes[i]));
+              }
+            }
+
+            const label = opcoes[idx];
+            if (!label) return prev;
+            const tok = tokenFor(idx, label);
+            if (tokenSet.has(tok)) tokenSet.delete(tok);
+            else tokenSet.add(tok);
+
+            return {
+              ...prev,
+              [String(pergunta.id)]: JSON.stringify(Array.from(tokenSet)),
+            };
+          });
+        };
+
+        return bloqueado ? (
+          <div className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-700">
+            {formatSelecionados() ? formatSelecionados() : '—'}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {opcoes.map((opcao, idx) => {
+              const id = `chk_${pergunta.id}_${idx}`;
+              return (
+              <div key={`${idx}-${opcao}`} className="flex items-center gap-3">
+                <input
+                  id={id}
+                  type="checkbox"
+                  checked={isChecked(idx, opcao)}
+                  onChange={() => toggleOpcao(idx)}
+                  className="w-5 h-5 text-cyan-600 border-gray-300 rounded focus:ring-2 focus:ring-cyan-500"
+                />
+                <label htmlFor={id} className="text-gray-700 hover:text-gray-900 cursor-pointer select-none">
+                  {stripToken(opcao)}
+                </label>
+              </div>
+            );})}
+            {opcoes.length === 0 && (
+              <div className="text-sm text-gray-500 italic">Nenhuma opção configurada</div>
+            )}
+          </div>
+        );
+      }
 
       default:
         return null;
@@ -1050,6 +1192,27 @@ export default function ModalQuestionarioProcesso({
                                     <div className="bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-[var(--fg)] px-3 py-2 rounded-lg text-sm font-medium inline-block">
                                       {String(resposta)}
                                     </div>
+                                  ) : pergunta.tipo === 'checkbox' ? (
+                                    <div className="bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-[var(--fg)] px-3 py-2 rounded-lg text-sm font-medium inline-block">
+                                      {(() => {
+                                        try {
+                                          const valores = typeof resposta === 'string' ? JSON.parse(resposta) : resposta;
+                                          if (Array.isArray(valores)) {
+                                            return valores
+                                              .map((v: any) => {
+                                                const s = String(v ?? '');
+                                                const m = s.match(/^\d+\|(.*)$/);
+                                                return m ? m[1] : s;
+                                              })
+                                              .filter((x: string) => x.trim())
+                                              .join(', ');
+                                          }
+                                          return String(resposta);
+                                        } catch {
+                                          return String(resposta);
+                                        }
+                                      })()}
+                                    </div>
                                   ) : pergunta.tipo === 'boolean' ? (
                                     <div
                                       className={`${String(resposta) === 'Sim'
@@ -1162,6 +1325,27 @@ export default function ModalQuestionarioProcesso({
                                 ) : pergunta.tipo === 'select' ? (
                                   <div className="bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-[var(--fg)] px-3 py-2 rounded-lg text-sm font-medium inline-block">
                                     {String(resposta)}
+                                  </div>
+                                ) : pergunta.tipo === 'checkbox' ? (
+                                  <div className="bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-[var(--fg)] px-3 py-2 rounded-lg text-sm font-medium inline-block">
+                                    {(() => {
+                                      try {
+                                        const valores = typeof resposta === 'string' ? JSON.parse(resposta) : resposta;
+                                        if (Array.isArray(valores)) {
+                                          return valores
+                                            .map((v: any) => {
+                                              const s = String(v ?? '');
+                                              const m = s.match(/^\d+\|(.*)$/);
+                                              return m ? m[1] : s;
+                                            })
+                                            .filter((x: string) => x.trim())
+                                            .join(', ');
+                                        }
+                                        return String(resposta);
+                                      } catch {
+                                        return String(resposta);
+                                      }
+                                    })()}
                                   </div>
                                 ) : pergunta.tipo === 'boolean' ? (
                                   <div
