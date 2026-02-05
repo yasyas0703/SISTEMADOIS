@@ -145,7 +145,12 @@ export default function Calendario({ onEventoClick }: CalendarioProps) {
         incluirProcessos: filtros.incluirProcessos,
         incluirDocumentos: filtros.incluirDocumentos,
       });
-      setEventos(eventosData);
+      
+      // Filtrar eventos ocultos (salvos no localStorage)
+      const eventosOcultos = JSON.parse(localStorage.getItem('eventosOcultos') || '[]');
+      const eventosFiltrados = eventosData.filter((e: any) => !eventosOcultos.includes(e.id));
+      
+      setEventos(eventosFiltrados);
     } catch (error) {
       console.error('Erro ao carregar eventos:', error);
     } finally {
@@ -170,25 +175,107 @@ export default function Calendario({ onEventoClick }: CalendarioProps) {
     return dias;
   }, [primeiraData, ultimaData]);
 
-  // Agrupar eventos por dia
+  // Agrupar eventos por dia (com suporte a recorrência)
   const eventosPorDia = useMemo(() => {
     const mapa = new Map<string, any[]>();
+    
+    // Função para adicionar evento em uma data
+    const adicionarEvento = (evento: any, data: Date) => {
+      const chave = `${data.getFullYear()}-${data.getMonth()}-${data.getDate()}`;
+      if (!mapa.has(chave)) {
+        mapa.set(chave, []);
+      }
+      // Criar cópia do evento com a data ajustada para exibição
+      mapa.get(chave)!.push({
+        ...evento,
+        dataExibicao: data,
+      });
+    };
     
     eventos.forEach(evento => {
       // Filtrar por tipo
       if (!filtros.tipos.includes(evento.tipo)) return;
       
       const dataEvento = getLocalDate(evento.dataInicio);
-      const chave = `${dataEvento.getFullYear()}-${dataEvento.getMonth()}-${dataEvento.getDate()}`;
+      const recorrencia = evento.recorrencia?.toLowerCase() || 'unico';
+      const recorrenciaFim = evento.recorrenciaFim ? getLocalDate(evento.recorrenciaFim) : null;
       
-      if (!mapa.has(chave)) {
-        mapa.set(chave, []);
+      // Se for único, adiciona só na data original
+      if (recorrencia === 'unico') {
+        if (dataEvento >= primeiraData && dataEvento <= ultimaData) {
+          adicionarEvento(evento, dataEvento);
+        }
+        return;
       }
-      mapa.get(chave)!.push(evento);
+      
+      // Para eventos recorrentes, gerar ocorrências no período visível
+      // Precisamos calcular qual seria a primeira ocorrência dentro do período visível
+      let dataAtual = new Date(dataEvento);
+      const diaOriginal = dataEvento.getDate();
+      const mesOriginal = dataEvento.getMonth();
+      const limiteIteracoes = 500; // Evitar loop infinito
+      let iteracoes = 0;
+      
+      // Avançar até chegar no período visível (ou passar dele)
+      while (dataAtual < primeiraData && iteracoes < limiteIteracoes) {
+        // Verificar se passou do fim da recorrência
+        if (recorrenciaFim && dataAtual > recorrenciaFim) return;
+        
+        switch (recorrencia) {
+          case 'diario':
+            dataAtual.setDate(dataAtual.getDate() + 1);
+            break;
+          case 'semanal':
+            dataAtual.setDate(dataAtual.getDate() + 7);
+            break;
+          case 'mensal':
+            // Para mensal, manter o mesmo dia do mês
+            dataAtual = new Date(dataAtual.getFullYear(), dataAtual.getMonth() + 1, diaOriginal, 12, 0, 0);
+            break;
+          case 'anual':
+            // Para anual, manter o mesmo dia e mês
+            dataAtual = new Date(dataAtual.getFullYear() + 1, mesOriginal, diaOriginal, 12, 0, 0);
+            break;
+          default:
+            return; // Recorrência inválida
+        }
+        iteracoes++;
+      }
+      
+      // Agora gerar ocorrências dentro do período visível
+      iteracoes = 0;
+      while (dataAtual <= ultimaData && iteracoes < limiteIteracoes) {
+        // Verificar se passou do fim da recorrência
+        if (recorrenciaFim && dataAtual > recorrenciaFim) break;
+        
+        // Se a data está no período visível, adiciona
+        if (dataAtual >= primeiraData && dataAtual <= ultimaData) {
+          adicionarEvento(evento, new Date(dataAtual));
+        }
+        
+        // Avançar para próxima ocorrência
+        switch (recorrencia) {
+          case 'diario':
+            dataAtual.setDate(dataAtual.getDate() + 1);
+            break;
+          case 'semanal':
+            dataAtual.setDate(dataAtual.getDate() + 7);
+            break;
+          case 'mensal':
+            dataAtual = new Date(dataAtual.getFullYear(), dataAtual.getMonth() + 1, diaOriginal, 12, 0, 0);
+            break;
+          case 'anual':
+            dataAtual = new Date(dataAtual.getFullYear() + 1, mesOriginal, diaOriginal, 12, 0, 0);
+            break;
+          default:
+            iteracoes = limiteIteracoes; // Sair do loop
+        }
+        iteracoes++;
+      }
     });
     
     return mapa;
-  }, [eventos, filtros.tipos]);
+  }, [eventos, filtros.tipos, primeiraData, ultimaData]);
 
   // Navegação
   const mesAnterior = () => {
@@ -840,11 +927,16 @@ export default function Calendario({ onEventoClick }: CalendarioProps) {
           onClick={() => setEventoSelecionado(null)}
         >
           <div 
-            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md"
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div
-              className="p-4 rounded-t-2xl bg-gradient-to-r from-indigo-600 to-purple-600"
+              className="p-4 rounded-t-2xl flex-shrink-0"
+              style={{
+                background: eventoSelecionado.cor 
+                  ? eventoSelecionado.cor 
+                  : 'linear-gradient(to right, #4F46E5, #7C3AED)',
+              }}
             >
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2 text-white">
@@ -852,6 +944,9 @@ export default function Calendario({ onEventoClick }: CalendarioProps) {
                   <span className="text-sm opacity-80">
                     {NOMES_TIPO[eventoSelecionado.tipo] || eventoSelecionado.tipo}
                   </span>
+                  {eventoSelecionado.privado && (
+                    <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">🔒 Privado</span>
+                  )}
                 </div>
                 <button
                   onClick={() => setEventoSelecionado(null)}
@@ -863,10 +958,11 @@ export default function Calendario({ onEventoClick }: CalendarioProps) {
               <h3 className="text-xl font-bold text-white mt-2">{eventoSelecionado.titulo}</h3>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Data e Hora */}
               <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400">
                 <CalendarIcon size={18} />
-                <span>{formatarData(eventoSelecionado.dataInicio)}</span>
+                <span>{formatarData(eventoSelecionado.dataExibicao || eventoSelecionado.dataInicio)}</span>
                 {!eventoSelecionado.diaInteiro && (
                   <>
                     <Clock size={18} className="ml-2" />
@@ -875,12 +971,68 @@ export default function Calendario({ onEventoClick }: CalendarioProps) {
                 )}
               </div>
 
+              {/* Descrição */}
               {eventoSelecionado.descricao && (
-                <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  {eventoSelecionado.descricao}
-                </p>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+                  <p className="text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap">
+                    {eventoSelecionado.descricao}
+                  </p>
+                </div>
               )}
 
+              {/* Informações adicionais */}
+              <div className="space-y-2 text-sm">
+                {/* Recorrência */}
+                {eventoSelecionado.recorrencia && eventoSelecionado.recorrencia !== 'unico' && (
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <RefreshCw size={16} />
+                    <span>
+                      Repete: {
+                        eventoSelecionado.recorrencia === 'diario' ? 'Todo dia' :
+                        eventoSelecionado.recorrencia === 'semanal' ? 'Toda semana' :
+                        eventoSelecionado.recorrencia === 'mensal' ? 'Todo mês' :
+                        eventoSelecionado.recorrencia === 'anual' ? 'Todo ano' :
+                        eventoSelecionado.recorrencia
+                      }
+                    </span>
+                  </div>
+                )}
+
+                {/* Empresa */}
+                {(eventoSelecionado.empresaId || eventoSelecionado.empresaNome) && (
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <Building size={16} />
+                    <span>
+                      {eventoSelecionado.empresaNome || 
+                        empresas.find(e => e.id === eventoSelecionado.empresaId)?.razao_social ||
+                        empresas.find(e => e.id === eventoSelecionado.empresaId)?.apelido ||
+                        'Empresa vinculada'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Departamento */}
+                {(eventoSelecionado.departamentoId || eventoSelecionado.departamentoNome) && (
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <Users size={16} />
+                    <span>
+                      {eventoSelecionado.departamentoNome || 
+                        departamentos.find(d => d.id === eventoSelecionado.departamentoId)?.nome ||
+                        'Departamento vinculado'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Processo vinculado */}
+                {eventoSelecionado.processoId && typeof eventoSelecionado.id === 'string' && (
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <Briefcase size={16} />
+                    <span>Processo #{eventoSelecionado.processoId}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Status */}
               {eventoSelecionado.status === 'atrasado' && (
                 <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/30 rounded-lg text-red-600 dark:text-red-400">
                   <AlertTriangle size={18} />
@@ -895,7 +1047,7 @@ export default function Calendario({ onEventoClick }: CalendarioProps) {
                 </div>
               )}
 
-              {/* Ações */}
+              {/* Ações para eventos criados manualmente */}
               {typeof eventoSelecionado.id === 'number' && eventoSelecionado.status !== 'concluido' && (
                 <div className="flex gap-2 pt-4 border-t dark:border-gray-700">
                   <button
@@ -908,16 +1060,37 @@ export default function Calendario({ onEventoClick }: CalendarioProps) {
                   <button
                     onClick={() => handleExcluirEvento(eventoSelecionado.id)}
                     className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                    title="Excluir evento"
                   >
                     <Trash2 size={16} />
                   </button>
                 </div>
               )}
 
+              {/* Ações para eventos de processo/documento */}
               {typeof eventoSelecionado.id === 'string' && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 text-center pt-2">
-                  Este evento é gerado automaticamente a partir de {eventoSelecionado.origem === 'processo' ? 'um processo' : 'um documento'}
-                </p>
+                <div className="pt-4 border-t dark:border-gray-700 space-y-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                    Este evento é gerado automaticamente a partir de {eventoSelecionado.origem === 'processo' ? 'um processo' : 'um documento'}
+                  </p>
+                  <button
+                    onClick={() => {
+                      // Salvar no localStorage que este evento deve ser ocultado
+                      const ocultos = JSON.parse(localStorage.getItem('eventosOcultos') || '[]');
+                      if (!ocultos.includes(eventoSelecionado.id)) {
+                        ocultos.push(eventoSelecionado.id);
+                        localStorage.setItem('eventosOcultos', JSON.stringify(ocultos));
+                      }
+                      // Remover da lista de eventos
+                      setEventos(prev => prev.filter(e => e.id !== eventoSelecionado.id));
+                      setEventoSelecionado(null);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"
+                  >
+                    <Eye size={16} className="line-through" />
+                    Ocultar do calendário
+                  </button>
+                </div>
               )}
             </div>
           </div>

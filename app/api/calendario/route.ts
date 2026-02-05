@@ -42,47 +42,100 @@ export async function GET(request: NextRequest) {
     
     // Tentar buscar eventos do calendário (se a tabela existir)
     try {
-      // Construir filtro
-      const where: any = {};
+      // Construir filtro para eventos únicos (dentro do período)
+      const whereUnico: any = {
+        recorrencia: 'UNICO',
+      };
       
       if (inicio) {
-        where.dataInicio = { ...where.dataInicio, gte: parseDate(inicio) };
+        whereUnico.dataInicio = { ...whereUnico.dataInicio, gte: parseDate(inicio) };
       }
       if (fim) {
-        where.dataInicio = { ...where.dataInicio, lte: parseDate(fim) };
+        whereUnico.dataInicio = { ...whereUnico.dataInicio, lte: parseDate(fim) };
       }
       if (tipo) {
-        where.tipo = tipo;
+        whereUnico.tipo = tipo;
       }
       if (departamentoId) {
-        where.departamentoId = Number(departamentoId);
+        whereUnico.departamentoId = Number(departamentoId);
       }
       if (empresaId) {
-        where.empresaId = Number(empresaId);
+        whereUnico.empresaId = Number(empresaId);
       }
       if (status) {
-        where.status = status;
+        whereUnico.status = status;
       }
       
-      // Filtrar eventos privados: só mostrar eventos públicos OU eventos privados do usuário logado
+      // Filtrar eventos privados
       if (usuarioId) {
-        where.OR = [
+        whereUnico.OR = [
           { privado: false },
           { privado: true, criadoPorId: usuarioId },
         ];
       } else {
-        // Se não está logado, só eventos públicos
-        where.privado = false;
+        whereUnico.privado = false;
       }
       
-      // Buscar eventos do calendário
-      const eventos = await (prisma as any).eventoCalendario.findMany({
-        where,
+      // Construir filtro para eventos recorrentes (começaram antes ou durante o período)
+      const whereRecorrente: any = {
+        recorrencia: { not: 'UNICO' },
+      };
+      
+      // Eventos recorrentes que começaram antes do fim do período
+      if (fim) {
+        whereRecorrente.dataInicio = { lte: parseDate(fim) };
+      }
+      // E que não terminaram antes do início do período (se tiverem fim)
+      if (inicio) {
+        whereRecorrente.OR = [
+          { recorrenciaFim: null },
+          { recorrenciaFim: { gte: parseDate(inicio) } },
+        ];
+      }
+      
+      if (tipo) {
+        whereRecorrente.tipo = tipo;
+      }
+      if (departamentoId) {
+        whereRecorrente.departamentoId = Number(departamentoId);
+      }
+      if (empresaId) {
+        whereRecorrente.empresaId = Number(empresaId);
+      }
+      if (status) {
+        whereRecorrente.status = status;
+      }
+      
+      // Filtrar eventos privados
+      if (usuarioId) {
+        whereRecorrente.AND = [
+          {
+            OR: [
+              { privado: false },
+              { privado: true, criadoPorId: usuarioId },
+            ],
+          },
+        ];
+      } else {
+        whereRecorrente.privado = false;
+      }
+      
+      // Buscar eventos únicos
+      const eventosUnicos = await (prisma as any).eventoCalendario.findMany({
+        where: whereUnico,
         orderBy: { dataInicio: 'asc' },
       });
       
+      // Buscar eventos recorrentes
+      const eventosRecorrentes = await (prisma as any).eventoCalendario.findMany({
+        where: whereRecorrente,
+        orderBy: { dataInicio: 'asc' },
+      });
+      
+      const todosEventos = [...eventosUnicos, ...eventosRecorrentes];
+      
       // Converter para formato do frontend
-      eventosFormatados = eventos.map((e: any) => ({
+      eventosFormatados = todosEventos.map((e: any) => ({
         id: e.id,
         titulo: e.titulo,
         descricao: e.descricao,
