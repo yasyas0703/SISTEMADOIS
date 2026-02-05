@@ -828,16 +828,16 @@ export default function Calendario({ onEventoClick }: CalendarioProps) {
 
       {/* Modal Detalhes do Evento */}
       {eventoSelecionado && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md">
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setEventoSelecionado(null)}
+        >
+          <div 
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div
-              className="p-4 rounded-t-2xl"
-              style={{
-                backgroundColor: eventoSelecionado.cor || CORES_TIPO[eventoSelecionado.tipo]?.bg.includes('bg-')
-                  ? undefined
-                  : eventoSelecionado.cor,
-                background: !eventoSelecionado.cor ? 'linear-gradient(to right, #4F46E5, #7C3AED)' : undefined,
-              }}
+              className="p-4 rounded-t-2xl bg-gradient-to-r from-indigo-600 to-purple-600"
             >
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2 text-white">
@@ -848,9 +848,9 @@ export default function Calendario({ onEventoClick }: CalendarioProps) {
                 </div>
                 <button
                   onClick={() => setEventoSelecionado(null)}
-                  className="text-white/80 hover:text-white p-1"
+                  className="text-white hover:bg-white/20 rounded-full p-1 transition-colors"
                 >
-                  <X size={20} />
+                  <X size={22} />
                 </button>
               </div>
               <h3 className="text-xl font-bold text-white mt-2">{eventoSelecionado.titulo}</h3>
