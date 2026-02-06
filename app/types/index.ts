@@ -314,3 +314,29 @@ export const FERIADOS_NACIONAIS = [
   { dia: 15, mes: 11, nome: 'Proclamação da República' },
   { dia: 25, mes: 12, nome: 'Natal' },
 ];
+
+// ==================== LIXEIRA ====================
+
+export type TipoItemLixeira = 'PROCESSO' | 'DOCUMENTO';
+
+export interface ItemLixeira {
+  id: number;
+  tipoItem: TipoItemLixeira;
+  itemIdOriginal: number;
+  dadosOriginais: any; // JSON com dados completos do item
+  processoId?: number | null;
+  empresaId?: number | null;
+  departamentoId?: number | null;
+  visibility: string;
+  allowedRoles: string[];
+  allowedUserIds: number[];
+  deletadoPorId: number;
+  deletadoEm: Date | string;
+  expiraEm: Date | string;
+  nomeItem: string;
+  descricaoItem?: string | null;
+  
+  // Relações expandidas (opcionais)
+  deletadoPor?: Usuario;
+  diasRestantes?: number; // Calculado: dias até expirar
+}

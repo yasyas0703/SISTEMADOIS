@@ -106,9 +106,35 @@ export function validarAvancoDepartamento(params: {
   const erros: ErroValidacao[] = [];
   const { processo, departamento, questionarios, documentos, respostas } = params;
 
+  const isRespostaVazia = (valor: any): boolean => {
+    if (valor === null || valor === undefined) return true;
+    if (typeof valor === 'string') return valor.trim().length === 0;
+    if (Array.isArray(valor)) return valor.length === 0;
+    return false;
+  };
+
+  // Função auxiliar para avaliar condições
+  const avaliarCondicao = (pergunta: any): boolean => {
+    if (!pergunta?.condicao) return true; // sem condição → sempre visível
+    const { perguntaId, operador, valor } = pergunta.condicao;
+    const respostaCond = respostas[perguntaId];
+    if (respostaCond === undefined || respostaCond === null || respostaCond === '') return false;
+    const r = String(respostaCond).trim().toLowerCase();
+    const v = String(valor).trim().toLowerCase();
+    switch (operador) {
+      case 'igual': return r === v;
+      case 'diferente': return r !== v;
+      case 'contem': return r.includes(v);
+      default: return true;
+    }
+  };
+
   // 1. Validar questionários obrigatórios respondidos
   const perguntasObrigatorias = questionarios.filter(q => q.obrigatorio);
   for (const pergunta of perguntasObrigatorias) {
+    // Se a pergunta tem condição e ela não é satisfeita, pular validação
+    if (!avaliarCondicao(pergunta)) continue;
+
     const resposta = respostas[pergunta.id];
     
     // Para checkbox, verificar se array tem pelo menos 1 item
@@ -130,7 +156,29 @@ export function validarAvancoDepartamento(params: {
           tipo: 'erro',
         });
       }
-    } else if (!resposta || resposta === '' || resposta === null || resposta === undefined) {
+    } else if (pergunta.tipo === 'boolean') {
+      // Para boolean, "false" é uma resposta válida
+      if (resposta === null || resposta === undefined) {
+        erros.push({
+          campo: `pergunta_${pergunta.id}`,
+          mensagem: `Pergunta obrigatória não respondida: "${pergunta.label}"`,
+          tipo: 'erro',
+        });
+      }
+    } else if (pergunta.tipo === 'file') {
+      // Para file, a validação de documentos é feita separadamente
+      // Verificar se existe algum documento vinculado à pergunta
+      const docVinculado = documentos.find(
+        (d: any) => Number(d?.perguntaId ?? d?.pergunta_id) === Number(pergunta.id)
+      );
+      if (!docVinculado && (!resposta || resposta === '' || resposta === null)) {
+        erros.push({
+          campo: `pergunta_${pergunta.id}`,
+          mensagem: `Arquivo obrigatório não enviado: "${pergunta.label}"`,
+          tipo: 'erro',
+        });
+      }
+    } else if (isRespostaVazia(resposta)) {
       erros.push({
         campo: `pergunta_${pergunta.id}`,
         mensagem: `Pergunta obrigatória não respondida: "${pergunta.label}"`,
@@ -139,7 +187,7 @@ export function validarAvancoDepartamento(params: {
     }
 
     // Validar tipo de resposta
-    if (resposta) {
+    if (!isRespostaVazia(resposta)) {
       const erroTipo = validarTipoResposta(pergunta, resposta);
       if (erroTipo) erros.push(erroTipo);
     }

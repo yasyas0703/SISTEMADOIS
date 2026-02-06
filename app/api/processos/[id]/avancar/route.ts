@@ -99,6 +99,7 @@ export async function POST(
       });
 
       // Montar respostas do departamento atual
+      // IMPORTANTE: sempre usar questionarioId como chave
       const respostasMap: Record<number, any> = {};
       const respostasQuestionario = await prisma.respostaQuestionario.findMany({
         where: {
@@ -113,19 +114,33 @@ export async function POST(
       });
       
       for (const respQuest of respostasQuestionario) {
-        if (respQuest.resposta) {
+        if (respQuest.resposta !== null && respQuest.resposta !== undefined) {
+          // Sempre usar questionarioId como chave para manter consistência
+          // O valor é armazenado como string (JSON ou texto plano)
+          let valor: any = respQuest.resposta;
           try {
-            const parsed = typeof respQuest.resposta === 'string' ? JSON.parse(respQuest.resposta) : respQuest.resposta;
-            if (typeof parsed === 'object' && parsed !== null) {
-              Object.assign(respostasMap, parsed);
+            const parsed = JSON.parse(respQuest.resposta);
+            // Se for um primitivo (string, number, boolean) ou array, usar o valor parseado
+            // Se for um objeto com chaves numéricas (batch de respostas antigo), extrair cada uma
+            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+              // Verificar se é um batch de respostas (chaves são IDs de perguntas)
+              const keys = Object.keys(parsed);
+              const allNumericKeys = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
+              if (allNumericKeys) {
+                // Batch: mapear cada chave individualmente
+                for (const [k, v] of Object.entries(parsed)) {
+                  respostasMap[Number(k)] = v;
+                }
+                continue; // Já mapeamos, pular a atribuição abaixo
+              }
+              valor = parsed;
             } else {
-              // Se não for objeto, usar o questionarioId como chave
-              respostasMap[respQuest.questionarioId] = parsed;
+              valor = parsed;
             }
           } catch {
-            // Se não for JSON, usar o valor direto
-            respostasMap[respQuest.questionarioId] = respQuest.resposta;
+            // Não é JSON, manter como string
           }
+          respostasMap[respQuest.questionarioId] = valor;
         }
       }
 
@@ -140,6 +155,11 @@ export async function POST(
             tipo: q.tipo as any || 'text',
             obrigatorio: q.obrigatorio || false,
             opcoes: Array.isArray(q.opcoes) ? q.opcoes : [],
+            condicao: q.condicaoPerguntaId ? {
+              perguntaId: q.condicaoPerguntaId,
+              operador: (q.condicaoOperador as any) || 'igual',
+              valor: q.condicaoValor || '',
+            } : undefined,
           })),
           documentos: processo.documentos || [],
           respostas: respostasMap,

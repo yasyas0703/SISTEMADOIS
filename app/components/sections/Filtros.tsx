@@ -37,8 +37,9 @@ export default function Filtros({
           <div className="relative w-full sm:w-auto">
             <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
+              id="busca-processos"
               type="text"
-              placeholder="Buscar processos..."
+              placeholder="Buscar processos... (Ctrl+F)"
               onChange={(e) => onBuscaChange(e.target.value)}
               className="pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200 w-full sm:w-64"
             />

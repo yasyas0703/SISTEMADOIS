@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Plus, Trash2, Edit, FileText, Users, Calculator, FileCheck, Briefcase, Headphones, Scale, CheckCircle } from 'lucide-react';
+import { X, Plus, Trash2, Edit, FileText, Users, Calculator, FileCheck, Briefcase, Headphones, Scale, CheckCircle, Building2, Landmark, ShieldCheck, Truck, Package, Heart, Wallet, CreditCard, BarChart3, PieChart, Settings, Wrench, Globe, Mail, Phone, MessageSquare, Clipboard, FolderOpen, Archive, BookOpen, GraduationCap, Award, Target, Flag, Zap, Star } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import * as LucideIcons from 'lucide-react';
 
@@ -35,12 +35,22 @@ export default function ModalCriarDepartamento({
   });
 
   const coresDisponiveis = [
-    { nome: 'Ciano', gradient: 'from-cyan-400 to-blue-500', solida: 'bg-cyan-500' },
-    { nome: 'Azul', gradient: 'from-blue-500 to-indigo-600', solida: 'bg-blue-600' },
-    { nome: 'Rosa', gradient: 'from-purple-500 to-pink-600', solida: 'bg-purple-600' },
-    { nome: 'Verde', gradient: 'from-green-500 to-emerald-600', solida: 'bg-green-600' },
-    { nome: 'Laranja', gradient: 'from-orange-500 to-red-600', solida: 'bg-orange-600' },
-    { nome: 'Amarelo', gradient: 'from-yellow-500 to-amber-600', solida: 'bg-yellow-600' },
+    { nome: 'Azul', gradient: 'from-blue-500 to-blue-700', solida: 'bg-blue-600' },
+    { nome: 'Ciano', gradient: 'from-cyan-500 to-cyan-700', solida: 'bg-cyan-600' },
+    { nome: 'Índigo', gradient: 'from-indigo-500 to-indigo-700', solida: 'bg-indigo-600' },
+    { nome: 'Roxo', gradient: 'from-purple-500 to-purple-700', solida: 'bg-purple-600' },
+    { nome: 'Rosa', gradient: 'from-pink-500 to-pink-700', solida: 'bg-pink-600' },
+    { nome: 'Vermelho', gradient: 'from-red-500 to-red-700', solida: 'bg-red-600' },
+    { nome: 'Laranja', gradient: 'from-orange-500 to-orange-700', solida: 'bg-orange-600' },
+    { nome: 'Amarelo', gradient: 'from-yellow-500 to-yellow-600', solida: 'bg-yellow-500' },
+    { nome: 'Lima', gradient: 'from-lime-500 to-lime-700', solida: 'bg-lime-600' },
+    { nome: 'Verde', gradient: 'from-green-500 to-green-700', solida: 'bg-green-600' },
+    { nome: 'Esmeralda', gradient: 'from-emerald-500 to-emerald-700', solida: 'bg-emerald-600' },
+    { nome: 'Turquesa', gradient: 'from-teal-500 to-teal-700', solida: 'bg-teal-600' },
+    { nome: 'Cinza', gradient: 'from-slate-500 to-slate-700', solida: 'bg-slate-600' },
+    { nome: 'Marrom', gradient: 'from-amber-700 to-amber-900', solida: 'bg-amber-800' },
+    { nome: 'Vinho', gradient: 'from-rose-700 to-rose-900', solida: 'bg-rose-800' },
+    { nome: 'Azul Escuro', gradient: 'from-blue-700 to-blue-900', solida: 'bg-blue-800' },
   ];
 
   const iconesDisponiveis = [
@@ -53,6 +63,32 @@ export default function ModalCriarDepartamento({
     { nome: 'Headphones', componente: Headphones, label: 'Atendimento' },
     { nome: 'Scale', componente: Scale, label: 'Jurídico' },
     { nome: 'CheckCircle', componente: CheckCircle, label: 'Conclusão' },
+    { nome: 'Building2', componente: Building2, label: 'Empresa' },
+    { nome: 'Landmark', componente: Landmark, label: 'Banco' },
+    { nome: 'ShieldCheck', componente: ShieldCheck, label: 'Segurança' },
+    { nome: 'Truck', componente: Truck, label: 'Logística' },
+    { nome: 'Package', componente: Package, label: 'Estoque' },
+    { nome: 'Heart', componente: Heart, label: 'Saúde' },
+    { nome: 'Wallet', componente: Wallet, label: 'Carteira' },
+    { nome: 'CreditCard', componente: CreditCard, label: 'Pagamentos' },
+    { nome: 'BarChart3', componente: BarChart3, label: 'Gráficos' },
+    { nome: 'PieChart', componente: PieChart, label: 'Análise' },
+    { nome: 'Settings', componente: Settings, label: 'Configurações' },
+    { nome: 'Wrench', componente: Wrench, label: 'Manutenção' },
+    { nome: 'Globe', componente: Globe, label: 'Global' },
+    { nome: 'Mail', componente: Mail, label: 'E-mail' },
+    { nome: 'Phone', componente: Phone, label: 'Telefone' },
+    { nome: 'MessageSquare', componente: MessageSquare, label: 'Chat' },
+    { nome: 'Clipboard', componente: Clipboard, label: 'Tarefas' },
+    { nome: 'FolderOpen', componente: FolderOpen, label: 'Pasta' },
+    { nome: 'Archive', componente: Archive, label: 'Arquivo' },
+    { nome: 'BookOpen', componente: BookOpen, label: 'Manual' },
+    { nome: 'GraduationCap', componente: GraduationCap, label: 'Treinamento' },
+    { nome: 'Award', componente: Award, label: 'Prêmio' },
+    { nome: 'Target', componente: Target, label: 'Meta' },
+    { nome: 'Flag', componente: Flag, label: 'Marco' },
+    { nome: 'Zap', componente: Zap, label: 'Energia' },
+    { nome: 'Star', componente: Star, label: 'Destaque' },
   ];
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -159,7 +195,7 @@ export default function ModalCriarDepartamento({
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Cor do Departamento
             </label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-2">
               {coresDisponiveis.map((cor) => (
                 <button
                   key={cor.nome}
@@ -182,7 +218,7 @@ export default function ModalCriarDepartamento({
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Ícone do Departamento
             </label>
-            <div className="grid grid-cols-6 gap-3">
+            <div className="grid grid-cols-6 sm:grid-cols-9 gap-2 max-h-48 overflow-y-auto p-1">
               {iconesDisponiveis.map((icone) => {
                 const IconeComp = icone.componente;
                 return (

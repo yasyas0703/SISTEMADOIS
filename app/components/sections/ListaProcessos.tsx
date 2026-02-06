@@ -1,15 +1,17 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Building,
   Eye,
   ArrowLeft,
   ArrowRight,
   CheckCircle,
+  CheckCircle2,
   MessageSquare,
   FileText,
-  Star,
+  Pin,
+  Tag,
   X,
   User,
   Calendar,
@@ -17,6 +19,7 @@ import {
   Edit,
   Mail,
   Phone,
+  Loader2,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
@@ -40,6 +43,8 @@ interface ListaProcessosProps {
   onFinalizar?: (processo: Processo) => void;
   onTags?: (processo: Processo) => void;
   onGerenciarTags?: (processo: Processo) => void;
+  favoritosIds?: Set<number>;
+  onToggleFavorito?: (processoId: number) => void;
 }
 
 export default function ListaProcessos({
@@ -58,8 +63,28 @@ export default function ListaProcessos({
   onFinalizar,
   onTags,
   onGerenciarTags,
+  favoritosIds = new Set(),
+  onToggleFavorito,
 }: ListaProcessosProps) {
   const { processos, tags, usuarioLogado, notificacoes } = useSistema();
+  
+  // Loading para feedback visual
+  const [loadingFavorito, setLoadingFavorito] = useState<number | null>(null);
+
+  // Toggle favorito usando callback do parent
+  const toggleFavorito = async (e: React.MouseEvent, processoId: number) => {
+    e.stopPropagation();
+    if (loadingFavorito === processoId || !onToggleFavorito) return;
+
+    setLoadingFavorito(processoId);
+    try {
+      await onToggleFavorito(processoId);
+    } catch (error) {
+      console.error('Erro ao alterar favorito:', error);
+    } finally {
+      setLoadingFavorito(null);
+    }
+  };
 
   const getNomeEmpresa = (proc: Processo): string => {
     const nomeEmpresa = (proc as any).nomeEmpresa;
@@ -241,33 +266,34 @@ export default function ListaProcessos({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start gap-3 mb-3">
                     <div className="flex-1 min-w-0">
-                      {/* Nome do Serviço */}
-                      {processo.nomeServico && (
-                        <div
-                          className="text-sm font-semibold text-blue-600 mb-1 truncate cursor-help"
-                          title={processo.nomeServico}
-                        >
-                          {processo.nomeServico}
-                        </div>
-                      )}
+                      {/* Linha 1: Nome do Serviço + Status + Prioridade */}
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        {processo.nomeServico && (
+                          <span className="text-sm font-semibold text-blue-600">
+                            {processo.nomeServico}
+                          </span>
+                        )}
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(processo.status)}`}>
+                          {formatarStatus(processo.status)}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(processo.prioridade)}`}>
+                          {formatarPrioridade(processo.prioridade)}
+                        </span>
+                      </div>
 
-                      {/* Nome da Empresa + Tags */}
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <h3
-                          className="text-xl font-bold text-gray-900 truncate flex-shrink min-w-0 max-w-[85%]"
-                          title={nomeEmpresa}
-                        >
+                      {/* Linha 2: Nome da Empresa + Tags */}
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-lg font-bold text-gray-900">
                           {nomeEmpresa}
                         </h3>
-
                         {(processo.tags || []).length > 0 && (
-                          <div className="flex gap-1 flex-shrink-0 flex-wrap">
+                          <div className="flex gap-1 flex-shrink-0">
                             {(processo.tags || []).map((tagId) => {
                               const tag = (tags || []).find((t) => t.id === tagId);
                               return tag ? (
                                 <div
                                   key={tagId}
-                                  className={`w-3 h-3 rounded-full ${tag.cor} border border-white shadow-sm flex-shrink-0`}
+                                  className={`w-3 h-3 rounded-full ${tag.cor} border border-white shadow-sm`}
                                   title={tag.nome}
                                 />
                               ) : null;
@@ -275,21 +301,6 @@ export default function ListaProcessos({
                           </div>
                         )}
                       </div>
-
-                      {/* Cliente */}
-                      <p className="text-sm text-gray-600 truncate" title={processo.cliente}>
-                        {processo.cliente || 'Não informado'}
-                      </p>
-                    </div>
-
-                    {/* Status e Prioridade */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(processo.status)}`}>
-                        {formatarStatus(processo.status)}
-                      </span>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(processo.prioridade)}`}>
-                        {formatarPrioridade(processo.prioridade)}
-                      </span>
                     </div>
                   </div>
 
@@ -480,7 +491,7 @@ export default function ListaProcessos({
                             onClick={() => onGerenciarTags(processo)}
                             className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
                           >
-                            <Star size={20} />
+                            <Tag size={20} />
                             Gerenciar Tags
                           </button>
                         )}
@@ -490,13 +501,31 @@ export default function ListaProcessos({
                             onClick={() => onTags(processo)}
                             className="bg-gradient-to-r from-violet-500 to-fuchsia-600 hover:from-violet-600 hover:to-fuchsia-700 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
                           >
-                            <Star size={16} />
+                            <Tag size={16} />
                             Tags {(processo.tags || []).length > 0 ? `(${(processo.tags || []).length})` : ''}
                           </button>
                         )}
                       </>
                     )}
                   </div>
+
+                  {/* Botão Favoritar */}
+                  <button
+                    onClick={(e) => toggleFavorito(e, processo.id)}
+                    disabled={loadingFavorito === processo.id}
+                    className={`p-2 rounded-lg transition-all ${
+                      favoritosIds.has(processo.id)
+                        ? 'bg-amber-100 text-amber-600 hover:bg-amber-200'
+                        : 'bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-500'
+                    }`}
+                    title={favoritosIds.has(processo.id) ? 'Remover dos fixados' : 'Fixar processo'}
+                  >
+                    {loadingFavorito === processo.id ? (
+                      <Loader2 size={20} className="animate-spin" />
+                    ) : (
+                      <Pin size={20} className={favoritosIds.has(processo.id) ? 'fill-current' : ''} />
+                    )}
+                  </button>
 
                   {onExcluir && (
                     (() => {
@@ -541,7 +570,7 @@ export default function ListaProcessos({
                         <div className="mt-1">
                           {item.tipo === 'inicio' && <Calendar className="text-blue-500" size={12} />}
                           {item.tipo === 'conclusao' && <CheckCircle className="text-green-500" size={12} />}
-                          {item.tipo === 'finalizacao' && <Star className="text-yellow-500" size={12} />}
+                          {item.tipo === 'finalizacao' && <CheckCircle2 className="text-yellow-500" size={12} />}
                           {item.tipo === 'movimentacao' && <ArrowRight className="text-purple-500" size={12} />}
                           {item.tipo === 'alteracao' && <Edit className="text-orange-500" size={12} />}
                           {item.tipo === 'documento' && <FileText className="text-blue-600" size={12} />}

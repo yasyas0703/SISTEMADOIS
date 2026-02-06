@@ -7,7 +7,10 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const preferredRegion = 'gru1';
 
-// DELETE /api/documentos/:id
+// Dias para expiração na lixeira
+const DIAS_EXPIRACAO_LIXEIRA = 15;
+
+// DELETE /api/documentos/:id - Move para lixeira ao invés de excluir permanentemente
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -25,6 +28,9 @@ export async function DELETE(
     // Buscar documento
     const documento = await prisma.documento.findUnique({
       where: { id: docId },
+      include: {
+        departamento: { select: { id: true, nome: true } },
+      },
     });
 
     if (!documento) {
@@ -59,17 +65,45 @@ export async function DELETE(
       );
     }
     
-    // Excluir do Supabase Storage
-    if (documento.path) {
-      try {
-        await deleteFile(documento.path);
-      } catch (error) {
-        console.error('Erro ao excluir arquivo do storage:', error);
-        // Continua mesmo se falhar no storage
-      }
-    }
+    // Calcular data de expiração (15 dias)
+    const dataExpiracao = new Date();
+    dataExpiracao.setDate(dataExpiracao.getDate() + DIAS_EXPIRACAO_LIXEIRA);
+
+    // Mover para lixeira ao invés de excluir
+    await prisma.itemLixeira.create({
+      data: {
+        tipoItem: 'DOCUMENTO',
+        itemIdOriginal: documento.id,
+        dadosOriginais: {
+          id: documento.id,
+          processoId: documento.processoId,
+          nome: documento.nome,
+          tipo: documento.tipo,
+          tipoCategoria: (documento as any).tipoCategoria,
+          tamanho: documento.tamanho.toString(),
+          url: documento.url,
+          path: documento.path,
+          departamentoId: documento.departamentoId,
+          perguntaId: documento.perguntaId,
+          dataUpload: documento.dataUpload,
+          uploadPorId: documento.uploadPorId,
+          visibility: (documento as any).visibility,
+          allowedRoles: (documento as any).allowedRoles,
+          allowedUserIds: (documento as any).allowedUserIds,
+        },
+        processoId: documento.processoId,
+        departamentoId: documento.departamentoId,
+        visibility: vis,
+        allowedRoles: allowedRoles.map(r => r.toLowerCase()),
+        allowedUserIds: allowedUserIds,
+        deletadoPorId: userId,
+        expiraEm: dataExpiracao,
+        nomeItem: documento.nome,
+        descricaoItem: `Documento ${documento.tipo} do processo #${documento.processoId}`,
+      },
+    });
     
-    // Excluir do banco
+    // Agora sim, excluir do banco (mas NÃO do storage - para permitir restauração)
     await prisma.documento.delete({
       where: { id: parseInt(params.id) },
     });
@@ -79,13 +113,16 @@ export async function DELETE(
       data: {
         processoId: documento.processoId,
         tipo: 'DOCUMENTO',
-        acao: `Documento "${documento.nome}" excluído`,
+        acao: `Documento "${documento.nome}" movido para lixeira`,
         responsavelId: user.id,
         dataTimestamp: BigInt(Date.now()),
       },
     });
     
-    return NextResponse.json({ message: 'Documento excluído com sucesso' });
+    return NextResponse.json({ 
+      message: 'Documento movido para lixeira',
+      diasParaExpiracao: DIAS_EXPIRACAO_LIXEIRA,
+    });
   } catch (error) {
     console.error('Erro ao excluir documento:', error);
     return NextResponse.json(

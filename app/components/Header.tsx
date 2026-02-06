@@ -127,7 +127,7 @@ export default function Header({
                 <button
                   onClick={onSelecionarTemplate}
                   className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-4 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
-                  title="Nova Solicitação usando Templates"
+                  title="Nova Solicitação usando Templates (Ctrl+N)"
                 >
                   <FileText size={20} />
                   <span className="hidden sm:inline">Nova Solicitação</span>
@@ -138,7 +138,7 @@ export default function Header({
                   <button
                     onClick={onPersonalizado}
                     className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-4 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
-                    title="Criar Solicitação Personalizada"
+                    title="Criar Solicitação Personalizada (Ctrl+N)"
                   >
                     <Plus size={20} />
                     <span className="hidden sm:inline">Personalizada</span>

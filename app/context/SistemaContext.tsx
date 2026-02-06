@@ -53,6 +53,7 @@ interface SistemaContextType {
   showCriarDepartamento: boolean;
   showQuestionarioSolicitacao: any;
   showSelecionarTemplate: boolean;
+  showLixeira: boolean;
 
   // Funções
   setProcessos: React.Dispatch<React.SetStateAction<Processo[]>>;
@@ -82,6 +83,7 @@ interface SistemaContextType {
   setShowCriarDepartamento: (show: boolean) => void;
   setShowQuestionarioSolicitacao: (show: any) => void;
   setShowSelecionarTemplate: (show: boolean) => void;
+  setShowLixeira: (show: boolean) => void;
 
   adicionarNotificacao: (mensagem: string, tipo: 'sucesso' | 'erro' | 'info') => void;
   removerNotificacao: (id: number) => void;
@@ -196,6 +198,7 @@ export function SistemaProvider({ children }: { children: React.ReactNode }) {
   const [showCriarDepartamento, setShowCriarDepartamento] = useState(false);
   const [showQuestionarioSolicitacao, setShowQuestionarioSolicitacao] = useState<any>(null);
   const [showSelecionarTemplate, setShowSelecionarTemplate] = useState(false);
+  const [showLixeira, setShowLixeira] = useState(false);
 
   const mostrarAlerta = useCallback(
     (titulo: string, mensagem: string, tipo: TipoAlerta = 'info') => {
@@ -1244,8 +1247,17 @@ useEffect(() => {
         setProcessos(prev => prev.map(p => p.id === processoId ? processoAtualizado : p));
         adicionarNotificacao('Processo avançado para próximo departamento', 'sucesso');
       } catch (error: any) {
-        adicionarNotificacao(error.message || 'Erro ao avançar processo', 'erro');
-        throw error;
+        const msg = error.message || 'Erro ao avançar processo';
+        // Se a mensagem contém detalhes de validação, mostrar alerta mais detalhado
+        if (msg.includes('Requisitos obrigatórios') || msg.includes('obrigatória') || msg.includes('obrigatório')) {
+          try {
+            await mostrarAlerta?.('Campos obrigatórios', msg, 'aviso');
+          } catch {
+            // noop
+          }
+        } else {
+          adicionarNotificacao(msg, 'erro');
+        }
       } finally {
         setGlobalLoading(false);
       }
@@ -1304,6 +1316,11 @@ useEffect(() => {
               tipo: q.tipo || 'text',
               obrigatorio: q.obrigatorio || false,
               opcoes: Array.isArray(q.opcoes) ? q.opcoes : [],
+              condicao: q.condicao || (q.condicaoPerguntaId ? {
+                perguntaId: q.condicaoPerguntaId,
+                operador: q.condicaoOperador || 'igual',
+                valor: q.condicaoValor || '',
+              } : undefined),
             })),
             documentos: documentos,
             respostas: respostas,
@@ -1525,6 +1542,7 @@ useEffect(() => {
     showCriarDepartamento,
     showQuestionarioSolicitacao,
     showSelecionarTemplate,
+    showLixeira,
 
     setProcessos,
     setEmpresas,
@@ -1553,6 +1571,7 @@ useEffect(() => {
     setShowCriarDepartamento,
     setShowQuestionarioSolicitacao,
     setShowSelecionarTemplate,
+    setShowLixeira,
 
     adicionarNotificacao,
     removerNotificacao,

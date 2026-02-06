@@ -409,12 +409,22 @@ export const gerarIdUnico = (): string => {
  */
 export const getCorsDepartamento = (index: number): { gradient: string; bg: string; text: string } => {
   const cores = [
-    { gradient: 'from-cyan-400 to-blue-500', bg: 'bg-cyan-100', text: 'text-cyan-700' },
-    { gradient: 'from-pink-400 to-rose-500', bg: 'bg-pink-100', text: 'text-pink-700' },
-    { gradient: 'from-orange-400 to-red-500', bg: 'bg-orange-100', text: 'text-orange-700' },
-    { gradient: 'from-purple-400 to-indigo-500', bg: 'bg-purple-100', text: 'text-purple-700' },
-    { gradient: 'from-green-400 to-teal-500', bg: 'bg-green-100', text: 'text-green-700' },
-    { gradient: 'from-yellow-400 to-orange-500', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+    { gradient: 'from-blue-500 to-blue-700', bg: 'bg-blue-100', text: 'text-blue-700' },
+    { gradient: 'from-cyan-500 to-cyan-700', bg: 'bg-cyan-100', text: 'text-cyan-700' },
+    { gradient: 'from-indigo-500 to-indigo-700', bg: 'bg-indigo-100', text: 'text-indigo-700' },
+    { gradient: 'from-purple-500 to-purple-700', bg: 'bg-purple-100', text: 'text-purple-700' },
+    { gradient: 'from-pink-500 to-pink-700', bg: 'bg-pink-100', text: 'text-pink-700' },
+    { gradient: 'from-red-500 to-red-700', bg: 'bg-red-100', text: 'text-red-700' },
+    { gradient: 'from-orange-500 to-orange-700', bg: 'bg-orange-100', text: 'text-orange-700' },
+    { gradient: 'from-yellow-500 to-yellow-600', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+    { gradient: 'from-lime-500 to-lime-700', bg: 'bg-lime-100', text: 'text-lime-700' },
+    { gradient: 'from-green-500 to-green-700', bg: 'bg-green-100', text: 'text-green-700' },
+    { gradient: 'from-emerald-500 to-emerald-700', bg: 'bg-emerald-100', text: 'text-emerald-700' },
+    { gradient: 'from-teal-500 to-teal-700', bg: 'bg-teal-100', text: 'text-teal-700' },
+    { gradient: 'from-slate-500 to-slate-700', bg: 'bg-slate-100', text: 'text-slate-700' },
+    { gradient: 'from-amber-700 to-amber-900', bg: 'bg-amber-100', text: 'text-amber-700' },
+    { gradient: 'from-rose-700 to-rose-900', bg: 'bg-rose-100', text: 'text-rose-700' },
+    { gradient: 'from-blue-700 to-blue-900', bg: 'bg-blue-100', text: 'text-blue-800' },
   ];
 
   return cores[index % cores.length];

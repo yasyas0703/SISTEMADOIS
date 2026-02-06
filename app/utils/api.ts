@@ -359,10 +359,20 @@ const normalizeProcesso = (raw: any) => {
 async function parseError(response: Response) {
   try {
     const data = await response.json();
-    if (data?.error) return String(data.error);
-    if (data?.message) return String(data.message);
+    let msg = '';
 
-    // Algumas rotas retornam detalhes adicionais
+    if (data?.error) msg = String(data.error);
+    else if (data?.message) msg = String(data.message);
+
+    // Se a resposta incluir 'detalhes' (ex: validação de avanço), anexar ao erro
+    if (Array.isArray(data?.detalhes) && data.detalhes.length > 0) {
+      const detalhesStr = data.detalhes.map((d: any) => String(d)).join('; ');
+      msg = msg ? `${msg}: ${detalhesStr}` : detalhesStr;
+    }
+
+    if (msg) return msg.slice(0, 600);
+
+    // Algumas rotas retornam detalhes adicionais em 'details'
     if (typeof data?.details === 'string' && data.details.trim()) return String(data.details).slice(0, 300);
     if (data?.details && typeof data.details === 'object') {
       try {
@@ -1347,5 +1357,135 @@ export const api = {
   // Marcar evento como concluído
   concluirEventoCalendario: async (id: number) => {
     return api.atualizarEventoCalendario(id, { status: 'concluido' });
+  },
+
+  // ========== LIXEIRA ==========
+  getLixeira: async (tipoItem?: 'PROCESSO' | 'DOCUMENTO') => {
+    try {
+      const params = tipoItem ? `?tipoItem=${tipoItem}` : '';
+      const response = await fetchAutenticado(`${API_URL}/lixeira${params}`);
+      if (!response.ok) {
+        throw new Error(await parseError(response));
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao buscar lixeira:', error);
+      throw error;
+    }
+  },
+
+  getItemLixeira: async (id: number) => {
+    try {
+      const response = await fetchAutenticado(`${API_URL}/lixeira/${id}`);
+      if (!response.ok) {
+        throw new Error(await parseError(response));
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao buscar item da lixeira:', error);
+      throw error;
+    }
+  },
+
+  restaurarItemLixeira: async (id: number) => {
+    try {
+      const response = await fetchAutenticado(`${API_URL}/lixeira/${id}`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response));
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao restaurar item da lixeira:', error);
+      throw error;
+    }
+  },
+
+  excluirItemLixeiraPermanente: async (id: number) => {
+    try {
+      const response = await fetchAutenticado(`${API_URL}/lixeira/${id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response));
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao excluir item permanentemente:', error);
+      throw error;
+    }
+  },
+
+  limparLixeira: async () => {
+    try {
+      const response = await fetchAutenticado(`${API_URL}/lixeira`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response));
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao limpar lixeira:', error);
+      throw error;
+    }
+  },
+
+  // =============================================
+  // FAVORITOS
+  // =============================================
+
+  getFavoritos: async () => {
+    try {
+      const response = await fetchAutenticado(`${API_URL}/favoritos`);
+      if (!response.ok) {
+        throw new Error(await parseError(response));
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao buscar favoritos:', error);
+      throw error;
+    }
+  },
+
+  adicionarFavorito: async (processoId: number) => {
+    try {
+      const response = await fetchAutenticado(`${API_URL}/favoritos`, {
+        method: 'POST',
+        body: JSON.stringify({ processoId }),
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response));
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao adicionar favorito:', error);
+      throw error;
+    }
+  },
+
+  removerFavorito: async (processoId: number) => {
+    try {
+      const response = await fetchAutenticado(`${API_URL}/favoritos`, {
+        method: 'DELETE',
+        body: JSON.stringify({ processoId }),
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response));
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao remover favorito:', error);
+      throw error;
+    }
+  },
+
+  toggleFavorito: async (processoId: number, isFavorito: boolean) => {
+    if (isFavorito) {
+      return api.removerFavorito(processoId);
+    } else {
+      return api.adicionarFavorito(processoId);
+    }
   },
 };

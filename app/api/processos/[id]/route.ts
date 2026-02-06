@@ -6,6 +6,9 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const preferredRegion = 'gru1';
 
+// Dias para expiração na lixeira
+const DIAS_EXPIRACAO_LIXEIRA = 15;
+
 function parseDateMaybe(value: any): Date | undefined {
   if (!value) return undefined;
   const d = new Date(value);
@@ -351,7 +354,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/processos/:id
+// DELETE /api/processos/:id - Move para lixeira ao invés de excluir permanentemente
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -362,9 +365,29 @@ export async function DELETE(
 
     const roleUpper = String((user as any).role || '').toUpperCase();
     const processoId = parseInt(params.id);
+    const userId = Number(user.id);
 
     if (roleUpper === 'USUARIO') {
       return NextResponse.json({ error: 'Sem permissão para excluir' }, { status: 403 });
+    }
+
+    // Buscar processo completo para salvar na lixeira (incluindo TODOS os dados relacionados)
+    const processo = await prisma.processo.findUnique({ 
+      where: { id: processoId },
+      include: {
+        empresa: true,
+        tags: { include: { tag: true } },
+        respostasQuestionario: true,
+        questionarios: true, // Questionários vinculados ao processo
+        comentarios: true,
+        documentos: true,
+        historicoEventos: true,
+        historicoFluxos: true,
+      },
+    });
+    
+    if (!processo) {
+      return NextResponse.json({ error: 'Processo não encontrado' }, { status: 404 });
     }
 
     if (roleUpper === 'GERENTE') {
@@ -374,11 +397,6 @@ export async function DELETE(
         return NextResponse.json({ error: 'Usuário sem departamento definido' }, { status: 403 });
       }
 
-      const processo = await prisma.processo.findUnique({ where: { id: processoId }, select: { id: true, departamentoAtual: true } });
-      if (!processo) {
-        return NextResponse.json({ error: 'Processo não encontrado' }, { status: 404 });
-      }
-
       if (processo.departamentoAtual !== departamentoUsuario) {
         return NextResponse.json({ error: 'Sem permissão para excluir processo de outro departamento' }, { status: 403 });
       }
@@ -386,9 +404,120 @@ export async function DELETE(
       return NextResponse.json({ error: 'Sem permissão para excluir' }, { status: 403 });
     }
 
+    // Calcular data de expiração (15 dias)
+    const dataExpiracao = new Date();
+    dataExpiracao.setDate(dataExpiracao.getDate() + DIAS_EXPIRACAO_LIXEIRA);
+
+    // Mover para lixeira
+    await prisma.itemLixeira.create({
+      data: {
+        tipoItem: 'PROCESSO',
+        itemIdOriginal: processo.id,
+        dadosOriginais: {
+          id: processo.id,
+          nome: processo.nome,
+          nomeServico: processo.nomeServico,
+          nomeEmpresa: processo.nomeEmpresa,
+          cliente: processo.cliente,
+          email: processo.email,
+          telefone: processo.telefone,
+          empresaId: processo.empresaId,
+          status: processo.status,
+          prioridade: processo.prioridade,
+          departamentoAtual: processo.departamentoAtual,
+          departamentoAtualIndex: processo.departamentoAtualIndex,
+          fluxoDepartamentos: processo.fluxoDepartamentos,
+          descricao: processo.descricao,
+          notasCriador: processo.notasCriador,
+          criadoPorId: processo.criadoPorId,
+          responsavelId: processo.responsavelId,
+          criadoEm: processo.criadoEm,
+          dataCriacao: processo.dataCriacao,
+          dataInicio: processo.dataInicio,
+          dataEntrega: processo.dataEntrega,
+          progresso: processo.progresso,
+          tags: processo.tags?.map(t => ({ tagId: t.tagId, tagNome: t.tag?.nome })),
+          // Salvar questionários vinculados ao processo
+          questionarios: (processo as any).questionarios?.map((q: any) => ({
+            id: q.id, // Guardar ID original para mapear respostas
+            departamentoId: q.departamentoId,
+            label: q.label,
+            tipo: q.tipo,
+            obrigatorio: q.obrigatorio,
+            ordem: q.ordem,
+            opcoes: q.opcoes,
+            placeholder: q.placeholder,
+            descricao: q.descricao,
+            condicaoPerguntaId: q.condicaoPerguntaId,
+            condicaoOperador: q.condicaoOperador,
+            condicaoValor: q.condicaoValor,
+          })),
+          // Salvar respostas do questionário
+          respostasQuestionario: processo.respostasQuestionario?.map(r => ({
+            questionarioId: r.questionarioId,
+            resposta: r.resposta,
+            respondidoPorId: r.respondidoPorId,
+            respondidoEm: r.respondidoEm,
+          })),
+          // Salvar comentários
+          comentarios: processo.comentarios?.map(c => ({
+            texto: c.texto || '',
+            autorId: c.autorId,
+            departamentoId: c.departamentoId,
+            criadoEm: c.criadoEm,
+            mencoes: c.mencoes,
+          })),
+          // Salvar histórico de eventos
+          historicoEventos: processo.historicoEventos?.map(h => ({
+            tipo: h.tipo,
+            acao: h.acao,
+            responsavelId: h.responsavelId,
+            departamento: h.departamento,
+            data: h.data,
+            dataTimestamp: h.dataTimestamp?.toString(),
+          })),
+          // Salvar histórico de fluxo
+          historicoFluxos: processo.historicoFluxos?.map(f => ({
+            departamentoOrigemId: (f as any).departamentoOrigemId,
+            departamentoDestinoId: (f as any).departamentoDestinoId,
+            movidoPorId: (f as any).movidoPorId,
+            movidoEm: (f as any).movidoEm,
+            observacao: (f as any).observacao,
+          })),
+          // Salvar referência aos documentos (URLs para restaurar)
+          documentos: processo.documentos?.map(d => ({
+            nome: d.nome,
+            tipo: d.tipo,
+            tipoCategoria: d.tipoCategoria,
+            tamanho: d.tamanho?.toString(),
+            url: d.url,
+            path: d.path,
+            departamentoId: d.departamentoId,
+            perguntaId: d.perguntaId,
+            dataUpload: d.dataUpload,
+            uploadPorId: d.uploadPorId,
+            visibility: d.visibility,
+            allowedRoles: d.allowedRoles,
+            allowedUserIds: d.allowedUserIds,
+          })),
+        },
+        empresaId: processo.empresaId,
+        departamentoId: processo.departamentoAtual,
+        visibility: 'PUBLIC', // Processos são públicos por padrão
+        deletadoPorId: userId,
+        expiraEm: dataExpiracao,
+        nomeItem: processo.nomeEmpresa || processo.nome || `Processo #${processo.id}`,
+        descricaoItem: processo.nomeServico || processo.descricao || null,
+      },
+    });
+
+    // Agora excluir do banco (cascade vai excluir comentários, documentos relacionados, etc.)
     await prisma.processo.delete({ where: { id: processoId } });
     
-    return NextResponse.json({ message: 'Processo excluído com sucesso' });
+    return NextResponse.json({ 
+      message: 'Processo movido para lixeira',
+      diasParaExpiracao: DIAS_EXPIRACAO_LIXEIRA,
+    });
   } catch (error) {
     console.error('Erro ao excluir processo:', error);
     return NextResponse.json(

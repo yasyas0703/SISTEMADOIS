@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { Bell, CheckCircle, AlertCircle, Info, Check, X } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Bell, CheckCircle, AlertCircle, Info, Check, X, Trash2 } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
+import { api } from '@/app/utils/api';
 
 interface NotificacoesPanelProps {
   onClose: () => void;
@@ -17,10 +18,29 @@ export default function NotificacoesPanel({ onClose }: NotificacoesPanelProps) {
     adicionarNotificacao,
     notificacoesNavegadorAtivas,
     ativarNotificacoesNavegador,
+    setShowLixeira,
   } = useSistema();
 
   const [marcandoIds, setMarcandoIds] = useState<Record<number, boolean>>({});
   const [marcandoTodas, setMarcandoTodas] = useState(false);
+  const [totalLixeira, setTotalLixeira] = useState(0);
+  const [expirando, setExpirando] = useState(0);
+
+  // Carregar contagem da lixeira
+  useEffect(() => {
+    const carregarContagemLixeira = async () => {
+      try {
+        const itens = await api.getLixeira();
+        if (Array.isArray(itens)) {
+          setTotalLixeira(itens.length);
+          setExpirando(itens.filter((i: any) => (i.diasRestantes || 0) <= 3).length);
+        }
+      } catch {
+        // Ignora erro silenciosamente
+      }
+    };
+    carregarContagemLixeira();
+  }, []);
 
   const formatarMensagem = (valor: unknown) => {
     if (typeof valor === 'string') return valor;
@@ -129,6 +149,32 @@ export default function NotificacoesPanel({ onClose }: NotificacoesPanelProps) {
             Fechar
           </button>
         </div>
+      </div>
+
+      {/* Botão Lixeira */}
+      <div className="px-4 py-2 border-b border-gray-200">
+        <button
+          onClick={() => {
+            setShowLixeira?.(true);
+            onClose();
+          }}
+          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+        >
+          <Trash2 size={16} />
+          <span>Abrir Lixeira</span>
+          <div className="ml-auto flex items-center gap-2">
+            {expirando > 0 && (
+              <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs font-medium rounded-full" title={`${expirando} itens expirando em breve`}>
+                ⚠️ {expirando}
+              </span>
+            )}
+            {totalLixeira > 0 && (
+              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                {totalLixeira}
+              </span>
+            )}
+          </div>
+        </button>
       </div>
 
       <div className="max-h-96 overflow-y-auto">

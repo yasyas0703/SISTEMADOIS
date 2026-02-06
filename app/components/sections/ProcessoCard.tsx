@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowRight,
   CheckCircle,
@@ -8,14 +8,18 @@ import {
   FileText,
   MessageSquare,
   Star,
+  Pin,
+  Tag,
   Upload,
   X,
+  Loader2,
 } from 'lucide-react';
 import { Processo } from '@/app/types';
 import { useSistema } from '@/app/context/SistemaContext';
 import { formatarData } from '@/app/utils/helpers';
 import { temPermissao as temPermissaoSistema } from '@/app/utils/permissions';
 import { verificarMencoesNaoLidasPorNotificacoes } from '@/app/utils/mentions';
+import { api } from '@/app/utils/api';
 
 interface ProcessoCardProps {
   processo: Processo;
@@ -29,6 +33,8 @@ interface ProcessoCardProps {
   onFinalizar: (id: number) => Promise<void>;
   onVerDetalhes: (processo: Processo) => void;
   onDragStart?: (e: React.DragEvent, processo: Processo) => void;
+  favoritosIds?: Set<number>;
+  onToggleFavorito?: (processoId: number) => void;
 }
 
 export default function ProcessoCard({
@@ -43,8 +49,24 @@ export default function ProcessoCard({
   onFinalizar,
   onVerDetalhes,
   onDragStart,
+  favoritosIds,
+  onToggleFavorito,
 }: ProcessoCardProps) {
-  const { tags, atualizarProcesso, usuarioLogado, mostrarAlerta, notificacoes } = useSistema();
+  const { tags, departamentos, atualizarProcesso, usuarioLogado, mostrarAlerta, notificacoes } = useSistema();
+  
+  const isFavorito = favoritosIds?.has(processo.id) || false;
+  const [toggling, setToggling] = useState(false);
+  
+  const handleToggleFavorito = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (toggling || !onToggleFavorito) return;
+    setToggling(true);
+    try {
+      await onToggleFavorito(processo.id);
+    } finally {
+      setToggling(false);
+    }
+  };
 
   const departamentoUsuario =
     typeof (usuarioLogado as any)?.departamentoId === 'number'
@@ -111,7 +133,15 @@ export default function ProcessoCard({
 
   const fluxo = processo.fluxoDepartamentos || [];
   const idxAtual = processo.departamentoAtualIndex || 0;
-  const isUltimo = fluxo.length > 0 ? idxAtual === fluxo.length - 1 : false;
+  const temFluxo = fluxo.length > 0;
+
+  // Quando tem fluxo definido, usa ele. Se não, calcula com base nos departamentos do sistema.
+  const isUltimo = temFluxo
+    ? idxAtual === fluxo.length - 1
+    : false; // sem fluxo = nunca é "ultimo" automaticamente
+
+  // Determinar se pode avançar: com fluxo, é só não ser o último. Sem fluxo, sempre pode.
+  const podeAvancarNoFluxo = temFluxo ? idxAtual < fluxo.length - 1 : true;
 
   const podeFinalizar = temPermissaoSistema(usuarioLogado, 'finalizar_processo', {
     departamentoAtual: processo.departamentoAtual,
@@ -121,15 +151,35 @@ export default function ProcessoCard({
   const progresso =
     typeof processo.progresso === 'number'
       ? processo.progresso
-      : fluxo.length > 0
+      : temFluxo
         ? Math.round(((idxAtual + 1) / fluxo.length) * 100)
         : 0;
 
   return (
     <div
-      className="bg-gray-50 rounded-xl p-4 cursor-move hover:bg-gray-100 transition-all duration-200 hover:shadow-md border border-gray-200"
+      className="bg-gray-50 rounded-xl p-4 cursor-move hover:bg-gray-100 transition-all duration-200 hover:shadow-md border border-gray-200 relative"
       onClick={() => onVerDetalhes(processo)}
     >
+      {/* Indicador de Fixado - canto superior esquerdo */}
+      {onToggleFavorito && (
+        <button
+          onClick={handleToggleFavorito}
+          disabled={toggling}
+          className={`absolute -top-1.5 -left-1.5 w-6 h-6 rounded-full flex items-center justify-center transition-all z-10 shadow-sm ${
+            isFavorito 
+              ? 'bg-amber-500 text-white hover:bg-amber-600' 
+              : 'bg-white text-gray-400 hover:bg-amber-100 hover:text-amber-500 border border-gray-200'
+          }`}
+          title={isFavorito ? 'Remover dos fixados' : 'Fixar processo'}
+        >
+          {toggling ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <Pin size={12} className={isFavorito ? 'fill-current' : ''} />
+          )}
+        </button>
+      )}
+
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1 min-w-0 mr-2">
           {processo.nomeServico && (
@@ -185,7 +235,7 @@ export default function ProcessoCard({
               className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-lg text-xs hover:bg-indigo-200 transition-colors flex items-center gap-1 flex-shrink-0"
               title="Tags"
             >
-              <Star size={10} />
+              <Tag size={10} />
               {(processo.tags || []).length > 0 && (
                 <span className="bg-indigo-500 text-white rounded-full w-3 h-3 text-[10px] flex items-center justify-center flex-shrink-0">
                   {(processo.tags || []).length}
@@ -327,7 +377,7 @@ export default function ProcessoCard({
 
             {podeExibirAcoesNoCard && podeMover && (
               <>
-                {fluxo.length > 0 && idxAtual < fluxo.length - 1 && (
+                {podeAvancarNoFluxo && !isUltimo && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -336,11 +386,11 @@ export default function ProcessoCard({
                     className="col-span-2 w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white px-2 py-1 rounded text-xs transition-colors flex items-center justify-center gap-1"
                   >
                     <ArrowRight size={10} />
-                    Avançar ({idxAtual + 1}/{fluxo.length})
+                    Avançar{temFluxo ? ` (${idxAtual + 1}/${fluxo.length})` : ''}
                   </button>
                 )}
 
-                {fluxo.length > 0 && isUltimo && podeFinalizar && (
+                {isUltimo && podeFinalizar && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

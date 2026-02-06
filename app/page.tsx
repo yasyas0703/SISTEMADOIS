@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { Plus, Building2, AlertCircle, LayoutDashboard, Calendar } from 'lucide-react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { Plus, Building2, AlertCircle, LayoutDashboard, Calendar, BarChart3 } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import { api } from '@/app/utils/api';
 import { Processo, Departamento } from '@/app/types';
@@ -13,6 +13,7 @@ import ListaProcessos from '@/app/components/sections/ListaProcessos';
 import SecaoAlertas from '@/app/components/sections/SecaoAlertas';
 import ProcessoDetalhado from '@/app/components/ProcessoDetalhado';
 import Calendario from '@/app/components/Calendario';
+import DashboardGraficos from '@/app/components/DashboardGraficos';
 import ModalLogin from '@/app/components/modals/ModalLogin';
 import ModalCriarDepartamento from '@/app/components/modals/ModalCriarDepartamento';
 import ModalNovaEmpresa from '@/app/components/modals/ModalNovaEmpresa';
@@ -32,9 +33,12 @@ import ModalConfirmacao from '@/app/components/modals/ModalConfirmacao';
 import ModalAlerta from '@/app/components/modals/ModalAlerta';
 import ModalEditarQuestionarioSolicitacao from '@/app/components/modals/ModalEditarQuestionarioSolicitacao';
 import ModalPreviewDocumento from '@/app/components/modals/ModalPreviewDocumento';
+import ModalLixeira from '@/app/components/modals/ModalLixeira';
+import SecaoFavoritos from '@/app/components/sections/SecaoFavoritos';
+import { useKeyboardShortcuts } from '@/app/hooks/useKeyboardShortcuts';
 
 // Tipos de aba
-type AbaAtiva = 'dashboard' | 'calendario';
+type AbaAtiva = 'dashboard' | 'calendario' | 'graficos';
 
 export default function Home() {
   const {
@@ -80,6 +84,8 @@ export default function Home() {
     setShowGaleria,
     showPreviewDocumento,
     setShowPreviewDocumento,
+    showLixeira,
+    setShowLixeira,
     excluirProcesso,
     avancarParaProximoDepartamento,
     voltarParaDepartamentoAnterior,
@@ -97,8 +103,41 @@ export default function Home() {
   const [showProcessoDetalhado, setShowProcessoDetalhado] = useState<Processo | null>(null);
   const [departamentoEmEdicao, setDepartamentoEmEdicao] = useState<Departamento | null>(null);
   
+  // Estado de favoritos
+  const [favoritosIds, setFavoritosIds] = useState<Set<number>>(new Set());
+  
   // Estado da aba ativa
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>('dashboard');
+
+  // ─── Atalhos de Teclado ⌨️ ────────────────────────────────────
+  useKeyboardShortcuts({
+    desabilitado: !usuarioLogado,
+
+    // Ctrl+N → Abrir modal de novo processo
+    onNovoProcesso: useCallback(() => {
+      setShowNovaEmpresa(true);
+    }, [setShowNovaEmpresa]),
+
+    // Ctrl+F → Focar no campo de busca
+    onBuscar: useCallback(() => {
+      // Muda para aba dashboard se não estiver nela
+      setAbaAtiva('dashboard');
+      // Foca no input de busca (delay curto para garantir renderização)
+      setTimeout(() => {
+        const input = document.getElementById('busca-processos') as HTMLInputElement;
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      }, 100);
+    }, []),
+
+    // Ctrl+S → Salvar / feedback visual (sem ação real global – previne save do navegador)
+    onSalvar: useCallback(() => {
+      // O Ctrl+S global apenas previne o comportamento padrão do navegador.
+      // Em modais com formulários, o save é tratado individualmente.
+    }, []),
+  });
 
   // Mantém o modal de visualização completo em sincronia com o estado global.
   // Ex.: se apagar documento na galeria/upload, o modal deve refletir imediatamente.
@@ -126,6 +165,43 @@ export default function Home() {
       return { ...(prev as any), documentos: docsAtualizados } as any;
     });
   }, [processos, showVisualizacao?.id]);
+
+  // Carregar favoritos quando o usuário está logado
+  useEffect(() => {
+    const carregarFavoritos = async () => {
+      if (!usuarioLogado) {
+        setFavoritosIds(new Set());
+        return;
+      }
+      try {
+        const favs = await api.getFavoritos();
+        // getFavoritos retorna os processos diretamente com o id do processo
+        setFavoritosIds(new Set(favs.map((f: any) => f.id)));
+      } catch (error) {
+        console.error('Erro ao carregar favoritos:', error);
+      }
+    };
+    carregarFavoritos();
+  }, [usuarioLogado]);
+
+  // Função para alternar favorito
+  const handleToggleFavorito = async (processoId: number) => {
+    try {
+      const isFavorito = favoritosIds.has(processoId);
+      await api.toggleFavorito(processoId, isFavorito);
+      setFavoritosIds(prev => {
+        const next = new Set(prev);
+        if (isFavorito) {
+          next.delete(processoId);
+        } else {
+          next.add(processoId);
+        }
+        return next;
+      });
+    } catch (error) {
+      console.error('Erro ao alternar favorito:', error);
+    }
+  };
 
   const handleLogin = (usuario: any) => {
     setUsuarioLogado(usuario);
@@ -308,6 +384,19 @@ export default function Home() {
               <Calendar size={18} />
               <span>Calendário</span>
             </button>
+            <button
+              onClick={() => setAbaAtiva('graficos')}
+              className={`
+                flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 text-sm font-medium border-b-2 transition-all
+                ${abaAtiva === 'graficos'
+                  ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'}
+              `}
+            >
+              <BarChart3 size={18} />
+              <span className="hidden sm:inline">Gráficos</span>
+              <span className="sm:hidden">📈</span>
+            </button>
           </nav>
         </div>
       </div>
@@ -384,8 +473,19 @@ export default function Home() {
               onExcluirDepartamento={handleExcluirDepartamento}
               onProcessoClicado={handleProcessoClicado}
               onGaleria={(dept) => setShowGaleria(dept)}
+              favoritosIds={favoritosIds}
+              onToggleFavorito={handleToggleFavorito}
             />
           </div>
+        </div>
+
+        {/* Seção de Favoritos */}
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 mt-6">
+          <SecaoFavoritos 
+            onProcessoClicado={handleProcessoClicado}
+            favoritosIds={favoritosIds}
+            onToggleFavorito={handleToggleFavorito}
+          />
         </div>
 
         {/* Filtros */}
@@ -457,15 +557,20 @@ export default function Home() {
               }
             })();
           }}
+          favoritosIds={favoritosIds}
+          onToggleFavorito={handleToggleFavorito}
         />
         </div>
-      ) : (
+      ) : abaAtiva === 'calendario' ? (
         /* Aba Calendário */
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 sm:py-8">
           <div className="h-[calc(100vh-180px)]">
             <Calendario />
           </div>
         </div>
+      ) : (
+        /* Aba Gráficos */
+        <DashboardGraficos />
       )}
 
       {/* MODALS */}
@@ -664,6 +769,14 @@ export default function Home() {
           onClose={() => setShowPreviewDocumento(null)}
         />
       )}
+
+      {showLixeira && (
+        <ModalLixeira
+          isOpen={showLixeira}
+          onClose={() => setShowLixeira(false)}
+        />
+      )}
+
     </div>
   );
 }
