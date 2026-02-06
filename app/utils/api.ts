@@ -456,6 +456,29 @@ export const api = {
     }
   },
 
+  verifyEmailCode: async (email: string, code: string) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/verify-email-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao verificar código');
+      }
+
+      const data = await response.json();
+      if (data.token) localStorage.setItem('token', data.token);
+      return data;
+    } catch (err) {
+      console.error('Erro ao verificar código:', err);
+      throw err;
+    }
+  },
+
   // ========== CONSULTAS EXTERNAS (PROXY) ==========
   consultarCnpj: async (cnpj: string) => {
     try {

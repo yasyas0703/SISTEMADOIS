@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/utils/prisma';
 import { verifyPassword, generateToken } from '@/app/utils/auth';
+import bcrypt from 'bcryptjs';
+import { sendEmail, buildVerificationEmail } from '@/app/utils/email';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -97,34 +99,33 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const token = generateToken({
-      userId: usuario.id,
-      email: usuario.email,
-      role: usuario.role,
-    });
-    
-    const response = NextResponse.json({
-      usuario: {
-        id: usuario.id,
-        nome: usuario.nome,
-        email: usuario.email,
-        role: usuario.role,
-        ativo: usuario.ativo,
-        departamentoId: usuario.departamentoId,
-        permissoes: usuario.permissoes,
+    // Em vez de emitir token imediatamente, geramos um código de verificação e enviamos por email.
+    // Código numérico de 6 dígitos
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+
+    // Hash do código para armazenamento
+    const codeHash = await bcrypt.hash(code, 10);
+
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutos
+
+    await prisma.emailVerificationCode.create({
+      data: {
+        usuarioId: usuario.id,
+        codeHash,
+        expiresAt,
       },
-      token,
     });
-    
-    // Definir cookie com token
-    response.cookies.set('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 dias
-    });
-    
-    return response;
+
+    // Envia email com o código (captura erros, mas não revela no cliente se houver falha)
+    try {
+      const { html, text } = buildVerificationEmail(code, 5);
+      await sendEmail(usuario.email, 'Código de verificação - Segundo passo', html, text);
+    } catch (emailErr: any) {
+      console.error('Erro ao enviar email de verificação:', emailErr);
+      return NextResponse.json({ error: 'Falha ao enviar código por email' }, { status: 500 });
+    }
+
+    return NextResponse.json({ needEmailCode: true, message: 'Código enviado para o email cadastrado' });
   } catch (error: any) {
     console.error('Erro no login:', error);
     

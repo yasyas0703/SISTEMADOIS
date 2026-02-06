@@ -18,6 +18,8 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
 
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
+  const [needCode, setNeedCode] = useState(false);
+  const [code, setCode] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +35,12 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
     try {
       const response = await api.login(formData.email, formData.senha);
       
+      if (response.needEmailCode) {
+        setNeedCode(true);
+        setLoading(false);
+        return;
+      }
+
       if (response.usuario) {
         // Mapeia o formato do backend para o formato esperado pelo frontend
         const deptId =
@@ -57,6 +65,40 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
       }
     } catch (error: any) {
       setErro(error.message || 'Credenciais inválidas');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErro('');
+    setLoading(true);
+    try {
+      const response = await api.verifyEmailCode(formData.email, code);
+      if (response.usuario) {
+        const deptId =
+          typeof (response.usuario as any).departamentoId === 'number'
+            ? (response.usuario as any).departamentoId
+            : typeof (response.usuario as any).departamento?.id === 'number'
+              ? (response.usuario as any).departamento.id
+              : undefined;
+        const usuario = {
+          id: response.usuario.id,
+          nome: response.usuario.nome,
+          email: response.usuario.email,
+          role: response.usuario.role.toLowerCase() as 'admin' | 'gerente' | 'usuario',
+          ativo: (response.usuario as any).ativo,
+          departamentoId: deptId,
+          departamento_id: deptId,
+          permissoes: response.usuario.permissoes || [],
+        };
+        onLogin(usuario);
+      } else {
+        setErro('Erro ao verificar código');
+      }
+    } catch (err: any) {
+      setErro(err.message || 'Código inválido');
     } finally {
       setLoading(false);
     }
@@ -95,7 +137,7 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
 
           {/* Form */}
           <div className="p-8">
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={(e) => (needCode ? handleVerifyCode(e) : handleSubmit(e))} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
                   Email
@@ -112,20 +154,59 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-                  Senha
-                </label>
-                <input
-                  type="password"
-                  value={formData.senha}
-                  onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 dark:border-[var(--border)] rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 transition-all duration-200 text-gray-900 dark:text-[var(--fg)] bg-white dark:bg-[var(--card)]"
-                  placeholder="Sua senha"
-                  aria-required
-                  disabled={loading}
-                />
-              </div>
+              {!needCode && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+                    Senha
+                  </label>
+                  <input
+                    type="password"
+                    value={formData.senha}
+                    onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 dark:border-[var(--border)] rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 transition-all duration-200 text-gray-900 dark:text-[var(--fg)] bg-white dark:bg-[var(--card)]"
+                    placeholder="Sua senha"
+                    aria-required
+                    disabled={loading}
+                  />
+                </div>
+              )}
+
+              {needCode && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+                    Código de verificação
+                  </label>
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 dark:border-[var(--border)] rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 transition-all duration-200 text-gray-900 dark:text-[var(--fg)] bg-white dark:bg-[var(--card)]"
+                    placeholder="000000"
+                    aria-required
+                    disabled={loading}
+                  />
+                  <div className="mt-2 text-sm text-gray-600 dark:text-gray-300 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setErro('');
+                        setLoading(true);
+                        try {
+                          await api.login(formData.email, formData.senha);
+                          // feedback leve
+                        } catch (err) {
+                          // ignore - login will have returned needEmailCode previously
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      className="text-sm text-cyan-600 hover:underline"
+                    >
+                      Reenviar código
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {erro && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm" role="alert">
@@ -139,7 +220,7 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
                 className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
               >
                 <LogIn size={20} />
-                {loading ? 'Entrando...' : 'Entrar'}
+                {loading ? (needCode ? 'Verificando...' : 'Entrando...') : (needCode ? 'Verificar código' : 'Entrar')}
               </button>
             </form>
           </div>

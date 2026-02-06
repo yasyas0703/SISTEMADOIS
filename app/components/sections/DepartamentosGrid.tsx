@@ -21,7 +21,7 @@ const iconMap: Record<string, any> = {
   Scale,
   CheckCircle,
   Edit,
-  Building, // fallback
+  Building, 
   Building2,
   Landmark,
   ShieldCheck,
@@ -137,9 +137,7 @@ export default function DepartamentosGrid({
       const swapIdx = direcao === 'esquerda' ? idx - 1 : idx + 1;
       if (swapIdx < 0 || swapIdx >= ordenados.length) return;
 
-      // Normalizar: atribuir ordem sequencial (0, 1, 2...) baseada na posição atual.
-      // Isso garante que cada departamento tenha uma ordem ÚNICA antes de trocar,
-      // resolvendo o caso onde todos têm ordem=0 (padrão).
+  
       const ordensNormalizadas: Record<number, number> = {};
       ordenados.forEach((d, i) => {
         ordensNormalizadas[d.id] = i;

@@ -34,6 +34,7 @@ model Usuario {
   templatesCriados      Template[]
   notificacoes          Notificacao[]
   favoritos             ProcessoFavorito[]
+  emailVerificationCodes EmailVerificationCode[]
 
   @@index([email])
   @@index([role])
@@ -586,4 +587,19 @@ model ProcessoFavorito {
   @@unique([usuarioId, processoId])
   @@index([usuarioId])
   @@index([processoId])
+}
+
+// Códigos de verificação enviados por email (2ª etapa)
+model EmailVerificationCode {
+  id         Int      @id @default(autoincrement())
+  usuarioId  Int
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  codeHash   String   // hash seguro do código (bcrypt)
+  expiresAt  DateTime
+  used       Boolean  @default(false)
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([usuarioId])
+  @@index([expiresAt])
 }
