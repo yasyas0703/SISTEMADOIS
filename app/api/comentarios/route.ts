@@ -18,9 +18,72 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const pid = parseInt(processoId);
+
+    // Coletar IDs de todos os processos interligados (mesma lógica da auditoria)
+    const processosIds = new Set<number>([pid]);
+    const processosNomes: Record<number, string> = {};
+
+    try {
+      const processo = await prisma.processo.findUnique({
+        where: { id: pid },
+        select: { id: true, interligadoComId: true, interligadoNome: true, nomeServico: true, nomeEmpresa: true },
+      });
+
+      if (processo) {
+        processosNomes[pid] = processo.nomeServico || processo.nomeEmpresa || `#${pid}`;
+
+        // Processo pai (este é continuação de outro)
+        if (processo.interligadoComId) {
+          processosIds.add(processo.interligadoComId);
+          processosNomes[processo.interligadoComId] = processo.interligadoNome || `#${processo.interligadoComId}`;
+        }
+      }
+
+      // Processos filhos (outros que são continuação deste)
+      const filhos = await prisma.processo.findMany({
+        where: { interligadoComId: pid },
+        select: { id: true, nomeServico: true, nomeEmpresa: true },
+      });
+      for (const f of filhos) {
+        processosIds.add(f.id);
+        processosNomes[f.id] = f.nomeServico || f.nomeEmpresa || `#${f.id}`;
+      }
+
+      // Verificar via tabela InterligacaoProcesso
+      try {
+        const interligacoes = await (prisma as any).interligacaoProcesso.findMany({
+          where: {
+            OR: [
+              { processoOrigemId: pid },
+              { processoDestinoId: pid },
+            ],
+          },
+        });
+        for (const inter of interligacoes) {
+          if (inter.processoOrigemId !== pid) processosIds.add(inter.processoOrigemId);
+          if (inter.processoDestinoId !== pid) processosIds.add(inter.processoDestinoId);
+        }
+      } catch { /* tabela pode não existir */ }
+
+      // Buscar nomes de processos que ainda não temos
+      const idsSemNome = Array.from(processosIds).filter(id => !processosNomes[id]);
+      if (idsSemNome.length > 0) {
+        const extras = await prisma.processo.findMany({
+          where: { id: { in: idsSemNome } },
+          select: { id: true, nomeServico: true, nomeEmpresa: true },
+        });
+        for (const e of extras) {
+          processosNomes[e.id] = e.nomeServico || e.nomeEmpresa || `#${e.id}`;
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao buscar processos interligados para comentários:', e);
+    }
     
     const comentarios = await prisma.comentario.findMany({
-      where: { processoId: parseInt(processoId) },
+      where: { processoId: { in: Array.from(processosIds) } },
       include: {
         autor: {
           select: { id: true, nome: true, email: true },
@@ -31,8 +94,16 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { criadoEm: 'desc' },
     });
+
+    // Adicionar info de processo de origem para o front
+    const comentariosComOrigem = comentarios.map((c) => ({
+      ...c,
+      processoOrigemId: c.processoId,
+      processoOrigemNome: processosNomes[c.processoId] || `#${c.processoId}`,
+      isInterligado: c.processoId !== pid,
+    }));
     
-    return NextResponse.json(comentarios);
+    return NextResponse.json(comentariosComOrigem);
   } catch (error) {
     console.error('Erro ao buscar comentários:', error);
     return NextResponse.json(

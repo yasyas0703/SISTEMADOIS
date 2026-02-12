@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { api } from '@/app/utils/api';
-import { X, MessageSquare, Edit, User, AtSign, Bell, Reply, CornerDownRight } from 'lucide-react';
+import { X, MessageSquare, Edit, User, AtSign, Bell, Reply, CornerDownRight, Link2 } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import LoadingOverlay from '../LoadingOverlay';
 import MentionInput from '../MentionInput';
@@ -308,13 +308,18 @@ export default function ModalComentarios({
                 return nomeMencao.toLowerCase() === usuarioLogado?.nome?.toLowerCase();
               });
 
+              const isLinked = !!(comentario as any).isInterligado;
+              const linkedName = (comentario as any).processoOrigemNome || '';
+
               return (
                 <div 
                   key={comentario.id} 
                   className={`rounded-xl p-4 transition-all ${
-                    usuarioMencionado
-                      ? 'bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-950 dark:to-blue-950 border-l-4 border-cyan-500 shadow-md hover:shadow-lg'
-                      : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750'
+                    isLinked
+                      ? 'bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-950 dark:to-indigo-950 border-l-4 border-purple-400 shadow-md hover:shadow-lg'
+                      : usuarioMencionado
+                        ? 'bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-950 dark:to-blue-950 border-l-4 border-cyan-500 shadow-md hover:shadow-lg'
+                        : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750'
                   }`}
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -333,6 +338,12 @@ export default function ModalComentarios({
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500 text-white text-xs rounded-full font-medium animate-pulse">
                               <Bell size={12} />
                               Você foi mencionado
+                            </span>
+                          )}
+                          {isLinked && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500 text-white text-xs rounded-full font-medium">
+                              <Link2 size={12} />
+                              {linkedName}
                             </span>
                           )}
                         </div>

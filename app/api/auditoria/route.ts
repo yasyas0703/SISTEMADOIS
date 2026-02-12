@@ -18,10 +18,69 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'processoId é obrigatório' }, { status: 400 });
     }
 
-    // Buscar histórico de eventos
+    const pid = parseInt(processoId);
+
+    // Buscar o processo para verificar interligações
+    const processo = await prisma.processo.findUnique({
+      where: { id: pid },
+      select: { id: true, interligadoComId: true, interligadoNome: true, nomeServico: true, nomeEmpresa: true },
+    });
+
+    // Coletar IDs de todos os processos interligados
+    const processosIds = new Set<number>([pid]);
+    const processosNomes: Record<number, string> = {};
+    if (processo) {
+      processosNomes[pid] = processo.nomeServico || processo.nomeEmpresa || `#${pid}`;
+    }
+
+    // Processo pai (este processo é continuação de outro)
+    if (processo?.interligadoComId) {
+      processosIds.add(processo.interligadoComId);
+      processosNomes[processo.interligadoComId] = processo.interligadoNome || `#${processo.interligadoComId}`;
+    }
+
+    // Processos filhos (outros processos que são continuação deste)
+    const filhos = await prisma.processo.findMany({
+      where: { interligadoComId: pid },
+      select: { id: true, nomeServico: true, nomeEmpresa: true },
+    });
+    for (const f of filhos) {
+      processosIds.add(f.id);
+      processosNomes[f.id] = f.nomeServico || f.nomeEmpresa || `#${f.id}`;
+    }
+
+    // Também verificar via tabela InterligacaoProcesso
+    try {
+      const interligacoes = await (prisma as any).interligacaoProcesso.findMany({
+        where: {
+          OR: [
+            { processoOrigemId: pid },
+            { processoDestinoId: pid },
+          ],
+        },
+      });
+      for (const inter of interligacoes) {
+        if (inter.processoOrigemId !== pid) processosIds.add(inter.processoOrigemId);
+        if (inter.processoDestinoId !== pid) processosIds.add(inter.processoDestinoId);
+      }
+    } catch { /* tabela pode não existir */ }
+
+    // Buscar nomes de processos que ainda não temos
+    const idsSemNome = Array.from(processosIds).filter(id => !processosNomes[id]);
+    if (idsSemNome.length > 0) {
+      const extras = await prisma.processo.findMany({
+        where: { id: { in: idsSemNome } },
+        select: { id: true, nomeServico: true, nomeEmpresa: true },
+      });
+      for (const e of extras) {
+        processosNomes[e.id] = e.nomeServico || e.nomeEmpresa || `#${e.id}`;
+      }
+    }
+
+    // Buscar histórico de eventos de TODOS os processos interligados
     const historico = await prisma.historicoEvento.findMany({
       where: {
-        processoId: parseInt(processoId),
+        processoId: { in: Array.from(processosIds) },
       },
       include: {
         responsavel: {
@@ -37,10 +96,14 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Serializar BigInt para string
+    // Serializar BigInt para string e adicionar informação do processo de origem
     const historicoSerializado = historico.map((evento) => ({
       ...evento,
       dataTimestamp: evento.dataTimestamp ? evento.dataTimestamp.toString() : null,
+      // Campos extras para o front identificar eventos de processos interligados
+      processoOrigemId: evento.processoId,
+      processoOrigemNome: processosNomes[evento.processoId] || `#${evento.processoId}`,
+      isInterligado: evento.processoId !== pid,
     }));
 
     return NextResponse.json(historicoSerializado);

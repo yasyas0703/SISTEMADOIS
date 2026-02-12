@@ -153,6 +153,148 @@ export async function GET(
     // Adicionar ao processo
     (processo as any).questionariosPorDepartamento = questionariosPorDeptObj;
 
+    // ========== MERGE QUESTIONÁRIOS DE PROCESSOS INTERLIGADOS ==========
+    // Se este processo é interligado com outro, buscar questionários e respostas do(s) processo(s) vinculado(s)
+    try {
+      const processosInterligadosIds: number[] = [];
+      const processosInterligadosInfo: Record<number, { nomeServico: string; nomeEmpresa: string }> = {};
+
+      // Processo pai (este é continuação de outro)
+      if (processo.interligadoComId) {
+        processosInterligadosIds.push(processo.interligadoComId);
+        processosInterligadosInfo[processo.interligadoComId] = {
+          nomeServico: processo.interligadoNome || `#${processo.interligadoComId}`,
+          nomeEmpresa: '',
+        };
+      }
+
+      // Processos filhos (outros que são continuação deste)
+      const filhos = await prisma.processo.findMany({
+        where: { interligadoComId: processo.id },
+        select: { id: true, nomeServico: true, nomeEmpresa: true },
+      });
+      for (const f of filhos) {
+        processosInterligadosIds.push(f.id);
+        processosInterligadosInfo[f.id] = {
+          nomeServico: f.nomeServico || `#${f.id}`,
+          nomeEmpresa: f.nomeEmpresa || '',
+        };
+      }
+
+      // Via tabela InterligacaoProcesso
+      try {
+        const interligacoes = await (prisma as any).interligacaoProcesso.findMany({
+          where: {
+            OR: [
+              { processoOrigemId: processo.id },
+              { processoDestinoId: processo.id },
+            ],
+          },
+        });
+        for (const inter of interligacoes) {
+          const outroId = inter.processoOrigemId === processo.id ? inter.processoDestinoId : inter.processoOrigemId;
+          if (!processosInterligadosIds.includes(outroId)) {
+            processosInterligadosIds.push(outroId);
+          }
+        }
+      } catch { /* tabela pode não existir */ }
+
+      if (processosInterligadosIds.length > 0) {
+        // Buscar info dos que faltam
+        const idsSemInfo = processosInterligadosIds.filter(id => !processosInterligadosInfo[id]);
+        if (idsSemInfo.length > 0) {
+          const extras = await prisma.processo.findMany({
+            where: { id: { in: idsSemInfo } },
+            select: { id: true, nomeServico: true, nomeEmpresa: true },
+          });
+          for (const e of extras) {
+            processosInterligadosInfo[e.id] = {
+              nomeServico: e.nomeServico || `#${e.id}`,
+              nomeEmpresa: e.nomeEmpresa || '',
+            };
+          }
+        }
+        // Buscar nomeEmpresa do pai se ainda não temos
+        if (processo.interligadoComId && !processosInterligadosInfo[processo.interligadoComId]?.nomeEmpresa) {
+          const pai = await prisma.processo.findUnique({
+            where: { id: processo.interligadoComId },
+            select: { nomeServico: true, nomeEmpresa: true },
+          });
+          if (pai) {
+            processosInterligadosInfo[processo.interligadoComId] = {
+              nomeServico: pai.nomeServico || processo.interligadoNome || `#${processo.interligadoComId}`,
+              nomeEmpresa: pai.nomeEmpresa || '',
+            };
+          }
+        }
+
+        // Buscar questionários com respostas dos processos interligados
+        const questionariosInterligados = await prisma.questionarioDepartamento.findMany({
+          where: { processoId: { in: processosInterligadosIds } },
+          include: {
+            respostas: {
+              include: { respondidoPor: { select: { id: true, nome: true } } },
+            },
+          },
+          orderBy: { ordem: 'asc' },
+        });
+
+        // Agrupar por processoId -> departamentoId
+        const respostasInterligadas: Record<number, any> = {};
+        for (const q of questionariosInterligados) {
+          const pId = q.processoId as number | null;
+          if (pId == null) continue;
+          if (!respostasInterligadas[pId]) {
+            const info = processosInterligadosInfo[pId] || { nomeServico: `#${pId}`, nomeEmpresa: '' };
+            respostasInterligadas[pId] = {
+              processoId: pId,
+              processoNome: info.nomeServico,
+              processoEmpresa: info.nomeEmpresa,
+              departamentos: {} as Record<number, any>,
+            };
+          }
+          const deptId = q.departamentoId;
+          if (!respostasInterligadas[pId].departamentos[deptId]) {
+            respostasInterligadas[pId].departamentos[deptId] = {
+              questionario: [] as any[],
+              respostas: {} as Record<string, any>,
+            };
+          }
+          respostasInterligadas[pId].departamentos[deptId].questionario.push({
+            id: q.id,
+            label: q.label,
+            tipo: q.tipo,
+            obrigatorio: q.obrigatorio,
+            opcoes: q.opcoes,
+            ordem: q.ordem,
+          });
+
+          // Mapear respostas
+          if (q.respostas && q.respostas.length > 0) {
+            const sorted = [...q.respostas].sort((a, b) =>
+              new Date(b.respondidoEm).getTime() - new Date(a.respondidoEm).getTime()
+            );
+            const latest = sorted[0];
+            let valor: any = latest.resposta;
+            if (typeof valor === 'string') {
+              try { valor = JSON.parse(valor); } catch { /* keep string */ }
+            }
+            respostasInterligadas[pId].departamentos[deptId].respostas[String(q.id)] = valor;
+            if (!respostasInterligadas[pId].departamentos[deptId].respondidoEm ||
+              new Date(latest.respondidoEm).getTime() > new Date(respostasInterligadas[pId].departamentos[deptId].respondidoEm).getTime()) {
+              respostasInterligadas[pId].departamentos[deptId].respondidoEm = latest.respondidoEm;
+              respostasInterligadas[pId].departamentos[deptId].respondidoPor = latest.respondidoPor?.nome ?? undefined;
+            }
+          }
+        }
+
+        (processo as any).respostasInterligadas = Object.values(respostasInterligadas);
+      }
+    } catch (e) {
+      console.error('Erro ao buscar questionários interligados:', e);
+      (processo as any).respostasInterligadas = [];
+    }
+
     return jsonBigInt(processo);
   } catch (error) {
     console.error('Erro ao buscar processo:', error);
@@ -258,6 +400,7 @@ export async function PUT(
         ...(data.nome !== undefined && { nome: data.nome }),
         ...(data.nomeServico !== undefined && { nomeServico: data.nomeServico }),
         ...(data.nomeEmpresa !== undefined && { nomeEmpresa: data.nomeEmpresa }),
+        ...(data.responsavelId !== undefined && { responsavelId: data.responsavelId }),
         ...(data.cliente !== undefined && { cliente: data.cliente }),
         ...(data.email !== undefined && { email: data.email }),
         ...(data.telefone !== undefined && { telefone: data.telefone }),
@@ -278,6 +421,7 @@ export async function PUT(
       include: {
         empresa: true,
         tags: { include: { tag: true } },
+        ...({ responsavel: { select: { id: true, nome: true, email: true } } } as any),
         criadoPor: {
           select: { id: true, nome: true, email: true },
         },
@@ -369,6 +513,17 @@ export async function DELETE(
 
     if (roleUpper === 'USUARIO') {
       return NextResponse.json({ error: 'Sem permissão para excluir' }, { status: 403 });
+    }
+
+    // Ler motivo de exclusão do body (se enviado)
+    let motivoExclusao: string | null = null;
+    let motivoExclusaoCustom: string | null = null;
+    try {
+      const body = await request.json();
+      motivoExclusao = body?.motivoExclusao || null;
+      motivoExclusaoCustom = body?.motivoExclusaoCustom || null;
+    } catch {
+      // body vazio, sem motivo
     }
 
     // Buscar processo completo para salvar na lixeira (incluindo TODOS os dados relacionados)
@@ -505,6 +660,8 @@ export async function DELETE(
           expiraEm: dataExpiracao,
           nomeItem: processo.nomeEmpresa || processo.nome || `Processo #${processo.id}`,
           descricaoItem: processo.nomeServico || processo.descricao || null,
+          ...(motivoExclusao ? { motivoExclusao } : {}),
+          ...(motivoExclusaoCustom ? { motivoExclusaoCustom } : {}),
         },
       });
     } catch (e) {

@@ -36,6 +36,7 @@ model Usuario {
   favoritos             ProcessoFavorito[]
   emailVerificationCodes EmailVerificationCode[]
   itensLixeira          ItemLixeira[]
+  logsAuditoria         LogAuditoria[] @relation("LogsAuditoria")
 
   @@index([email])
   @@index([role])
@@ -162,6 +163,13 @@ model Processo {
   dataFinalizacao DateTime?
 
   progresso Int @default(0) // 0-100
+
+  // Interligação (processo vinculado que segue após finalização)
+  interligadoComId Int? // ID do template/processo que será criado ao finalizar
+  interligadoNome  String? // Nome da solicitação interligada
+
+  // Controle de departamentos independentes
+  deptIndependente Boolean @default(false) // Se true, departamentos podem trabalhar em paralelo
 
   // Relações
   tags                  ProcessoTag[]
@@ -559,6 +567,8 @@ model ItemLixeira {
   // Metadados adicionais
   nomeItem      String // Nome para exibição (nome do doc ou processo)
   descricaoItem String? // Descrição breve
+  motivoExclusao String? // Motivo da exclusão
+  motivoExclusaoCustom String? // Motivo customizado
 
   @@index([tipoItem])
   @@index([deletadoPorId])
@@ -612,4 +622,99 @@ model EmailVerificationCode {
 
   @@index([usuarioId])
   @@index([expiresAt])
+}
+
+// ============================================
+// LOGS DE AUDITORIA (HISTÓRICO GLOBAL)
+// ============================================
+
+model LogAuditoria {
+  id          Int      @id @default(autoincrement())
+  usuarioId   Int
+  usuario     Usuario  @relation("LogsAuditoria", fields: [usuarioId], references: [id])
+  acao        TipoAcaoLog
+  entidade    String   // ex: 'PROCESSO', 'EMPRESA', 'DEPARTAMENTO', etc
+  entidadeId  Int?     // ID do item afetado
+  entidadeNome String? // Nome legível (ex: nome da empresa, nome da solicitação)
+  campo       String?  // Campo específico alterado (ex: 'regime_federal')
+  valorAnterior String? @db.Text // Valor antes da alteração
+  valorNovo    String? @db.Text // Valor após a alteração
+  detalhes    String?  @db.Text // Detalhes adicionais (JSON ou texto livre)
+  processoId  Int?     // Se relacionado a um processo
+  empresaId   Int?     // Se relacionado a uma empresa
+  departamentoId Int?  // Se relacionado a um departamento
+  ip          String?  // IP do usuário (opcional)
+  criadoEm    DateTime @default(now())
+
+  @@index([usuarioId])
+  @@index([entidade])
+  @@index([processoId])
+  @@index([empresaId])
+  @@index([criadoEm])
+  @@index([acao])
+}
+
+enum TipoAcaoLog {
+  CRIAR
+  EDITAR
+  EXCLUIR
+  VISUALIZAR
+  AVANCAR
+  VOLTAR
+  FINALIZAR
+  PREENCHER
+  COMENTAR
+  ANEXAR
+  TAG
+  TRANSFERIR
+  INTERLIGAR
+  CHECK
+  LOGIN
+  LOGOUT
+  IMPORTAR
+}
+
+// ============================================
+// INTERLIGAÇÃO DE SOLICITAÇÕES
+// ============================================
+
+model InterligacaoProcesso {
+  id             Int      @id @default(autoincrement())
+  processoOrigemId  Int
+  processoDestinoId Int
+  criadoPorId    Int
+  automatica     Boolean  @default(false) // true = interligação veio de template
+  criadoEm       DateTime @default(now())
+
+  @@unique([processoOrigemId, processoDestinoId])
+  @@index([processoOrigemId])
+  @@index([processoDestinoId])
+}
+
+// ============================================
+// CHECKLIST DE DEPARTAMENTO (CONCLUSÃO)
+// ============================================
+
+model ChecklistDepartamento {
+  id             Int      @id @default(autoincrement())
+  processoId     Int
+  departamentoId Int
+  concluido      Boolean  @default(false)
+  concluidoPorId Int?
+  concluidoEm    DateTime?
+
+  @@unique([processoId, departamentoId])
+  @@index([processoId])
+  @@index([departamentoId])
+}
+
+// ============================================
+// MOTIVOS DE EXCLUSÃO
+// ============================================
+
+model MotivoExclusao {
+  id        Int      @id @default(autoincrement())
+  nome      String   @unique
+  padrao    Boolean  @default(false) // true = motivo pré-definido do sistema
+  criadoEm  DateTime @default(now())
 }

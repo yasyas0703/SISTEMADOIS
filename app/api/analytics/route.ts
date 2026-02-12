@@ -115,7 +115,145 @@ export async function GET(request: NextRequest) {
       processosCriadosPeriodo > 0
         ? (processosFinalizadosCriadosPeriodo / processosCriadosPeriodo) * 100
         : 0;
-    
+
+    // ========== ANALYTICS DE EXCLUSÕES ==========
+    // Filtros específicos de exclusão
+    const excPeriodo = searchParams.get('excPeriodo'); // dias
+    const excDeptId = searchParams.get('excDeptId');
+    const excUsuarioId = searchParams.get('excUsuarioId');
+    const excMotivo = searchParams.get('excMotivo');
+
+    const excWhere: any = { tipoItem: 'PROCESSO' };
+    if (excPeriodo && Number(excPeriodo) > 0) {
+      const excDataInicio = new Date();
+      excDataInicio.setDate(excDataInicio.getDate() - Number(excPeriodo));
+      excWhere.deletadoEm = { gte: excDataInicio };
+    }
+    if (excDeptId && excDeptId !== 'todos') {
+      excWhere.departamentoId = Number(excDeptId);
+    }
+    if (excUsuarioId && excUsuarioId !== 'todos') {
+      excWhere.deletadoPorId = Number(excUsuarioId);
+    }
+    if (excMotivo && excMotivo !== 'todos') {
+      if (excMotivo === 'Não informado') {
+        excWhere.motivoExclusao = null;
+      } else {
+        excWhere.OR = [
+          { motivoExclusao: excMotivo },
+          { motivoExclusaoCustom: excMotivo },
+        ];
+      }
+    }
+
+    let exclusoesData: any = {
+      totalExcluidos: 0,
+      motivosExclusao: [],
+      exclusoesPorMes: [],
+      usuarios: [],
+    };
+    try {
+      const totalExcluidos = await prisma.itemLixeira.count({
+        where: excWhere,
+      });
+
+      // Motivos de exclusão agrupados
+      let motivosExclusao: any[] = [];
+      try {
+        const itensLixeira = await prisma.itemLixeira.findMany({
+          where: excWhere,
+          select: {
+            motivoExclusao: true,
+            motivoExclusaoCustom: true,
+            deletadoEm: true,
+            deletadoPorId: true,
+          },
+        });
+
+        const motivoCount: Record<string, number> = {};
+        itensLixeira.forEach((item: any) => {
+          // Prioriza motivoExclusaoCustom quando motivo é "Outro", senão usa motivoExclusao diretamente
+          let motivo = item.motivoExclusao || 'Não informado';
+          if (motivo === 'Outro' && item.motivoExclusaoCustom) {
+            motivo = item.motivoExclusaoCustom;
+          }
+          motivoCount[motivo] = (motivoCount[motivo] || 0) + 1;
+        });
+        motivosExclusao = Object.entries(motivoCount)
+          .map(([motivo, count]) => ({ motivo, count }))
+          .sort((a, b) => b.count - a.count);
+
+        // Exclusões por mês (últimos 12 meses)
+        const exclusoesPorMes: { mes: string; count: number }[] = [];
+        for (let i = 11; i >= 0; i--) {
+          const d = new Date();
+          d.setMonth(d.getMonth() - i);
+          const mesInicio = new Date(d.getFullYear(), d.getMonth(), 1);
+          const mesFim = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+          const count = itensLixeira.filter((item: any) => {
+            const del = new Date(item.deletadoEm);
+            return del >= mesInicio && del <= mesFim;
+          }).length;
+          exclusoesPorMes.push({
+            mes: mesInicio.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
+            count,
+          });
+        }
+
+        // Usuários que excluíram (para preencher filtro)
+        const usuarioIds = [...new Set(itensLixeira.map((i: any) => i.deletadoPorId))];
+
+        exclusoesData = { totalExcluidos, motivosExclusao, exclusoesPorMes };
+      } catch {
+        exclusoesData.totalExcluidos = totalExcluidos;
+      }
+
+      // Buscar todos os usuários que já excluíram algo (sem filtro) para popular dropdown
+      try {
+        const todosItens = await prisma.itemLixeira.findMany({
+          where: { tipoItem: 'PROCESSO' },
+          select: { deletadoPorId: true },
+          distinct: ['deletadoPorId'],
+        });
+        const userIds = todosItens.map((i: any) => i.deletadoPorId);
+        if (userIds.length > 0) {
+          const usuarios = await prisma.usuario.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, nome: true },
+          });
+          exclusoesData.usuarios = usuarios;
+        }
+      } catch {
+        // silencioso
+      }
+
+      // Buscar departamentos que tiveram exclusões para popular dropdown
+      try {
+        const todosItensDept = await prisma.itemLixeira.findMany({
+          where: { tipoItem: 'PROCESSO', departamentoId: { not: null } },
+          select: { departamentoId: true },
+          distinct: ['departamentoId'],
+        });
+        const deptIds = todosItensDept.map((i: any) => i.departamentoId).filter(Boolean);
+        if (deptIds.length > 0) {
+          const depts = await prisma.departamento.findMany({
+            where: { id: { in: deptIds } },
+            select: { id: true, nome: true },
+          });
+          exclusoesData.departamentos = depts;
+        } else {
+          exclusoesData.departamentos = [];
+        }
+      } catch {
+        exclusoesData.departamentos = [];
+      }
+
+      // Listar motivos únicos para filtro
+      exclusoesData.motivosUnicos = exclusoesData.motivosExclusao.map((m: any) => m.motivo);
+    } catch {
+      // Tabela pode não existir — campo motivoExclusao pode não existir
+    }
+
     return NextResponse.json({
       totalProcessos,
       processosPorStatus: processosPorStatus.map((p) => ({
@@ -133,6 +271,7 @@ export async function GET(request: NextRequest) {
       tempoMedioTotalDias: round2(tempoMedioTotalDias),
       taxaConclusao: round2(taxaConclusao),
       periodo: periodoDias,
+      exclusoes: exclusoesData,
     });
   } catch (error) {
     console.error('Erro ao buscar analytics:', error);

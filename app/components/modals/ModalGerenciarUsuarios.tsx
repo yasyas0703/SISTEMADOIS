@@ -240,10 +240,12 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
                       autoComplete="off"
                       placeholder="Nome do usuário"
                       value={editandoUsuario ? editandoUsuario.nome : novoUsuario.nome}
-                      onChange={(e) => editandoUsuario 
-                        ? setEditandoUsuario({ ...editandoUsuario, nome: e.target.value.slice(0, 60) })
-                        : setNovoUsuario({ ...novoUsuario, nome: e.target.value.slice(0, 60) })
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value.slice(0, 60);
+                        editandoUsuario 
+                          ? setEditandoUsuario((prev: any) => ({ ...prev, nome: val }))
+                          : setNovoUsuario(prev => ({ ...prev, nome: val }));
+                      }}
                       maxLength={60}
                       className="w-full px-4 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                     />
@@ -259,10 +261,12 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
                       autoComplete="new-password"
                       placeholder={editandoUsuario ? "Nova senha (opcional)" : "Senha"}
                       value={editandoUsuario ? (editandoUsuario.senha || '') : novoUsuario.senha}
-                      onChange={(e) => editandoUsuario
-                        ? setEditandoUsuario({ ...editandoUsuario, senha: e.target.value.slice(0, 32) })
-                        : setNovoUsuario({ ...novoUsuario, senha: e.target.value.slice(0, 32) })
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value.slice(0, 32);
+                        editandoUsuario
+                          ? setEditandoUsuario((prev: any) => ({ ...prev, senha: val }))
+                          : setNovoUsuario(prev => ({ ...prev, senha: val }));
+                      }}
                       maxLength={32}
                       className="w-full px-4 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                     />
@@ -279,10 +283,12 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
                     autoComplete="off"
                     placeholder="email@empresa.com"
                     value={editandoUsuario ? editandoUsuario.email : novoUsuario.email}
-                    onChange={(e) => editandoUsuario
-                      ? setEditandoUsuario({ ...editandoUsuario, email: e.target.value.slice(0, 80) })
-                      : setNovoUsuario({ ...novoUsuario, email: e.target.value.slice(0, 80) })
-                    }
+                    onChange={(e) => {
+                      const val = e.target.value.slice(0, 80);
+                      editandoUsuario
+                        ? setEditandoUsuario((prev: any) => ({ ...prev, email: val }))
+                        : setNovoUsuario(prev => ({ ...prev, email: val }));
+                    }}
                     maxLength={80}
                     className="w-full px-4 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
                   />
@@ -298,9 +304,9 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
                       onChange={(e) => {
                         const newRole = e.target.value as 'admin' | 'gerente' | 'usuario';
                         if (editandoUsuario) {
-                          setEditandoUsuario({ ...editandoUsuario, role: newRole });
+                          setEditandoUsuario((prev: any) => ({ ...prev, role: newRole }));
                         } else {
-                          setNovoUsuario({ ...novoUsuario, role: newRole });
+                          setNovoUsuario(prev => ({ ...prev, role: newRole }));
                         }
                       }}
                       className="w-full px-4 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
@@ -319,13 +325,13 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
                         Departamento *
                       </label>
                       <select
-                        value={editandoUsuario ? editandoUsuario.departamentoId : novoUsuario.departamentoId}
+                        value={editandoUsuario ? (editandoUsuario.departamentoId ?? '') : (novoUsuario.departamentoId ?? '')}
                         onChange={(e) => {
                           const deptId = e.target.value ? parseInt(e.target.value) : undefined;
                           if (editandoUsuario) {
-                            setEditandoUsuario({ ...editandoUsuario, departamentoId: deptId });
+                            setEditandoUsuario((prev: any) => ({ ...prev, departamentoId: deptId }));
                           } else {
-                            setNovoUsuario({ ...novoUsuario, departamentoId: deptId });
+                            setNovoUsuario(prev => ({ ...prev, departamentoId: deptId }));
                           }
                         }}
                         className="w-full px-4 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg focus:ring-2 focus:ring-purple-500 bg-white dark:bg-[var(--card)] text-gray-900 dark:text-[var(--fg)]"
@@ -347,10 +353,10 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
                         <input
                           type="checkbox"
                           checked={editandoUsuario.ativo}
-                          onChange={(e) => setEditandoUsuario({ 
-                            ...editandoUsuario, 
-                            ativo: e.target.checked 
-                          })}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setEditandoUsuario((prev: any) => ({ ...prev, ativo: checked }));
+                          }}
                           className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
                         />
                         <label className="text-sm font-medium text-gray-700">
@@ -436,10 +442,11 @@ export default function ModalGerenciarUsuarios({ onClose }: ModalGerenciarUsuari
 
                           <button
                             onClick={() => {
-                              // Converter role para minúsculas ao editar
+                              // Converter role para minúsculas e extrair departamentoId ao editar
                               setEditandoUsuario({
                                 ...user,
-                                role: typeof user.role === 'string' ? user.role.toLowerCase() : user.role
+                                role: typeof user.role === 'string' ? user.role.toLowerCase() : user.role,
+                                departamentoId: (user as any).departamento?.id ?? (user as any).departamentoId ?? undefined
                               });
                             }}
                             className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg"

@@ -102,6 +102,7 @@ interface SistemaContextType {
   criarEmpresa: (dados: Partial<Empresa>) => Promise<Empresa>;
   atualizarEmpresa: (empresaId: number, dados: Partial<Empresa>) => Promise<void>;
   excluirEmpresa: (empresaId: number) => Promise<void>;
+  carregarEmpresas: () => Promise<void>;
   criarTemplate: (dados: {
     nome: string;
     descricao?: string;
@@ -111,9 +112,9 @@ interface SistemaContextType {
   excluirTemplate: (templateId: number) => Promise<void>;
   criarProcesso: (dados: Partial<Processo>) => Promise<Processo>;
   atualizarProcesso: (processoId: number, dados: Partial<Processo>) => Promise<void>;
-  excluirProcesso: (processoId: number) => Promise<void>;
+  excluirProcesso: (processoId: number, motivoExclusao?: string, motivoExclusaoCustom?: string) => Promise<void>;
   avancarParaProximoDepartamento: (processoId: number) => Promise<void>;
-  finalizarProcesso: (processoId: number) => Promise<void>;
+  finalizarProcesso: (processoId: number) => Promise<{ finalizado: boolean; processoId: number; interligadoComId: number | null; processoNome: string } | void>;
   globalLoading: boolean;
   setGlobalLoading: (v: boolean) => void;
   aplicarTagsProcesso: (processoId: number, tags: number[]) => Promise<void>;
@@ -1009,6 +1010,7 @@ useEffect(() => {
       const nova = await api.salvarEmpresa(dados);
       setEmpresas(prev => [...prev, nova]);
       adicionarNotificacao('Empresa criada com sucesso', 'sucesso');
+      api.registrarLog?.({ acao: 'CRIAR', entidade: 'EMPRESA', entidadeId: nova.id, entidadeNome: (nova as any).razao_social });
       return nova;
     } catch (error: any) {
       adicionarNotificacao(error.message || 'Erro ao criar empresa', 'erro');
@@ -1021,6 +1023,7 @@ useEffect(() => {
       const atualizada = await api.atualizarEmpresa(empresaId, dados);
       setEmpresas(prev => prev.map(e => e.id === empresaId ? atualizada : e));
       adicionarNotificacao('Empresa atualizada com sucesso', 'sucesso');
+      api.registrarLog?.({ acao: 'EDITAR', entidade: 'EMPRESA', entidadeId: empresaId });
     } catch (error: any) {
       adicionarNotificacao(error.message || 'Erro ao atualizar empresa', 'erro');
       throw error;
@@ -1032,11 +1035,21 @@ useEffect(() => {
       await api.excluirEmpresa(empresaId);
       setEmpresas(prev => prev.filter(e => e.id !== empresaId));
       adicionarNotificacao('Empresa excluída com sucesso', 'sucesso');
+      api.registrarLog?.({ acao: 'EXCLUIR', entidade: 'EMPRESA', entidadeId: empresaId });
     } catch (error: any) {
       adicionarNotificacao(error.message || 'Erro ao excluir empresa', 'erro');
       throw error;
     }
   }, [adicionarNotificacao]);
+
+  const carregarEmpresas = useCallback(async () => {
+    try {
+      const data = await api.getEmpresas();
+      setEmpresas(data || []);
+    } catch {
+      // silencioso
+    }
+  }, []);
 
   const criarTemplate = useCallback(
     async (dados: {
@@ -1054,6 +1067,7 @@ useEffect(() => {
         });
         setTemplates(prev => [...prev, novo]);
         adicionarNotificacao('Template criado com sucesso', 'sucesso');
+        api.registrarLog?.({ acao: 'CRIAR', entidade: 'TEMPLATE', entidadeId: novo.id, entidadeNome: dados.nome });
         return novo;
       } catch (error: any) {
         adicionarNotificacao(error.message || 'Erro ao criar template', 'erro');
@@ -1068,6 +1082,7 @@ useEffect(() => {
       await api.excluirTemplate(templateId);
       setTemplates(prev => prev.filter(t => t.id !== templateId));
       adicionarNotificacao('Template excluído com sucesso', 'sucesso');
+      api.registrarLog?.({ acao: 'EXCLUIR', entidade: 'TEMPLATE', entidadeId: templateId });
     } catch (error: any) {
       adicionarNotificacao(error.message || 'Erro ao excluir template', 'erro');
       throw error;
@@ -1079,6 +1094,7 @@ useEffect(() => {
       const atualizado = await api.atualizarProcesso(processoId, dados);
       setProcessos(prev => prev.map(p => p.id === processoId ? atualizado : p));
       adicionarNotificacao('Processo atualizado com sucesso', 'sucesso');
+      api.registrarLog?.({ acao: 'EDITAR', entidade: 'PROCESSO', entidadeId: processoId });
     } catch (error: any) {
       adicionarNotificacao(error.message || 'Erro ao atualizar processo', 'erro');
       throw error;
@@ -1119,6 +1135,9 @@ useEffect(() => {
           descricao: dados.descricao,
           notasCriador: dados.notasCriador,
           dataEntrega: (dados as any).dataEntrega, // Prazo de entrega
+          interligadoComId: (dados as any).interligadoComId,
+          interligadoNome: (dados as any).interligadoNome,
+          deptIndependente: (dados as any).deptIndependente,
         });
 
         // UI otimista: insere imediatamente (não bloqueia a experiência)
@@ -1139,6 +1158,7 @@ useEffect(() => {
         })();
         
         adicionarNotificacao('Processo criado com sucesso', 'sucesso');
+        api.registrarLog?.({ acao: 'CRIAR', entidade: 'PROCESSO', entidadeId: novo.id, entidadeNome: novo.nomeEmpresa || novo.nome });
         return novo;
       } catch (error: any) {
         adicionarNotificacao(error.message || 'Erro ao criar processo', 'erro');
@@ -1148,11 +1168,19 @@ useEffect(() => {
     [departamentos, adicionarNotificacao, usuarioLogado]
   );
 
-  const excluirProcesso = useCallback(async (processoId: number) => {
+  const excluirProcesso = useCallback(async (processoId: number, motivoExclusao?: string, motivoExclusaoCustom?: string) => {
     try {
-      await api.excluirProcesso(processoId);
+      await api.excluirProcesso(processoId, motivoExclusao, motivoExclusaoCustom);
       setProcessos(prev => prev.filter(p => p.id !== processoId));
       adicionarNotificacao('Processo excluído com sucesso', 'sucesso');
+
+      // Registrar log de auditoria
+      api.registrarLog?.({
+        acao: 'EXCLUIR',
+        entidade: 'PROCESSO',
+        entidadeId: processoId,
+        detalhes: motivoExclusao ? `Motivo: ${motivoExclusao}${motivoExclusaoCustom ? ` - ${motivoExclusaoCustom}` : ''}` : undefined,
+      });
     } catch (error: any) {
       adicionarNotificacao(error.message || 'Erro ao excluir processo', 'erro');
       throw error;
@@ -1246,6 +1274,7 @@ useEffect(() => {
         const processoAtualizado = await api.getProcesso(processoId);
         setProcessos(prev => prev.map(p => p.id === processoId ? processoAtualizado : p));
         adicionarNotificacao('Processo avançado para próximo departamento', 'sucesso');
+        api.registrarLog?.({ acao: 'AVANCAR', entidade: 'PROCESSO', entidadeId: processoId });
       } catch (error: any) {
         const msg = error.message || 'Erro ao avançar processo';
         // Se a mensagem contém detalhes de validação, mostrar alerta mais detalhado
@@ -1276,82 +1305,115 @@ useEffect(() => {
       // Buscar processo COMPLETO da API (não do estado)
       const processoCompleto = await api.getProcesso(processoId);
       
-      console.log('=== DEBUG FINALIZAR ===');
-      console.log('Processo:', processoCompleto);
-      console.log('Departamento atual:', processoCompleto.departamentoAtual);
-      
-      // Buscar departamento atual
-      const departamentoAtual = departamentos.find(d => d.id === processoCompleto.departamentoAtual);
-      
-      console.log('Departamento encontrado:', departamentoAtual);
-      
-      if (departamentoAtual) {
-        // Buscar questionários do departamento atual
-        const questionarios = processoCompleto.questionariosPorDepartamento?.[departamentoAtual.id] || [];
-        const documentos = processoCompleto.documentos || [];
-        const respostas = processoCompleto.respostasHistorico?.[departamentoAtual.id]?.respostas || {};
-        
-        console.log('Questionários:', questionarios);
-        console.log('Documentos:', documentos.length);
-        console.log('Respostas:', respostas);
-        console.log('Docs obrigatórios:', departamentoAtual.documentosObrigatorios);
-        
-        // Verificar se há itens obrigatórios pendentes
-        const perguntasObrigatorias = questionarios.filter((q: any) => q.obrigatorio);
-        const documentosObrigatorios = departamentoAtual.documentosObrigatorios || [];
-        
-        console.log('Perguntas obrigatórias:', perguntasObrigatorias.length);
-        console.log('Docs obrigatórios:', documentosObrigatorios.length);
-        
-        if (perguntasObrigatorias.length > 0 || documentosObrigatorios.length > 0) {
-          // Importar função de validação
-          const { validarAvancoDepartamento } = await import('@/app/utils/validation');
-          
-          const validacao = validarAvancoDepartamento({
-            processo: processoCompleto as any,
-            departamento: departamentoAtual,
-            questionarios: questionarios.map((q: any) => ({
-              id: q.id,
-              label: q.label || 'Pergunta',
-              tipo: q.tipo || 'text',
-              obrigatorio: q.obrigatorio || false,
-              opcoes: Array.isArray(q.opcoes) ? q.opcoes : [],
-              condicao: q.condicao || (q.condicaoPerguntaId ? {
-                perguntaId: q.condicaoPerguntaId,
-                operador: q.condicaoOperador || 'igual',
-                valor: q.condicaoValor || '',
-              } : undefined),
-            })),
-            documentos: documentos,
-            respostas: respostas,
-          });
-          
-          console.log('Resultado validação:', validacao);
-          
-          if (!validacao.valido) {
-            const errosCriticos = validacao.erros.filter(e => e.tipo === 'erro');
-            const mensagem = errosCriticos.map(e => e.mensagem).join('\n');
-            
-            console.log('BLOQUEANDO FINALIZAÇÃO:', mensagem);
-            
-            // Remover loading ANTES de mostrar alerta
-            setGlobalLoading(false);
-            
-            // Mostrar alerta visual
-            await mostrarAlerta(
-              'Requisitos Obrigatórios Pendentes',
-              `Complete os seguintes itens antes de finalizar:\n\n${mensagem}`,
-              'erro'
-            );
-            
-            return; // Não lançar erro, apenas retornar
+      // Importar função de validação
+      const { validarAvancoDepartamento } = await import('@/app/utils/validation');
+      const documentos = processoCompleto.documentos || [];
+
+      // ============================================
+      // PROCESSO PARALELO (deptIndependente): validar TODOS os departamentos do fluxo
+      // ============================================
+      if (processoCompleto.deptIndependente) {
+        const fluxoIds: number[] = (Array.isArray(processoCompleto.fluxoDepartamentos)
+          ? processoCompleto.fluxoDepartamentos : []).map(Number).filter(Number.isFinite);
+
+        const errosGlobais: string[] = [];
+
+        for (const deptId of fluxoIds) {
+          const dept = departamentos.find(d => d.id === deptId);
+          if (!dept) continue;
+
+          const questionariosDoDept = processoCompleto.questionariosPorDepartamento?.[deptId] || [];
+          const respostasDoDept = processoCompleto.respostasHistorico?.[deptId]?.respostas || {};
+
+          const perguntasObrigatorias = questionariosDoDept.filter((q: any) => q.obrigatorio);
+          const documentosObrigatorios = dept.documentosObrigatorios || [];
+
+          if (perguntasObrigatorias.length > 0 || documentosObrigatorios.length > 0) {
+            const validacao = validarAvancoDepartamento({
+              processo: processoCompleto as any,
+              departamento: dept,
+              questionarios: questionariosDoDept.map((q: any) => ({
+                id: q.id,
+                label: q.label || 'Pergunta',
+                tipo: q.tipo || 'text',
+                obrigatorio: q.obrigatorio || false,
+                opcoes: Array.isArray(q.opcoes) ? q.opcoes : [],
+                condicao: q.condicao || (q.condicaoPerguntaId ? {
+                  perguntaId: q.condicaoPerguntaId,
+                  operador: q.condicaoOperador || 'igual',
+                  valor: q.condicaoValor || '',
+                } : undefined),
+              })),
+              documentos: documentos,
+              respostas: respostasDoDept,
+            });
+
+            if (!validacao.valido) {
+              const criticos = validacao.erros.filter(e => e.tipo === 'erro');
+              if (criticos.length > 0) {
+                errosGlobais.push(`📌 ${dept.nome}:\n${criticos.map(e => `  • ${e.mensagem}`).join('\n')}`);
+              }
+            }
           }
-        } else {
-          console.log('Sem itens obrigatórios, finalizando...');
+        }
+
+        if (errosGlobais.length > 0) {
+          setGlobalLoading(false);
+          await mostrarAlerta(
+            'Requisitos Obrigatórios Pendentes',
+            `Complete os seguintes itens antes de finalizar:\n\n${errosGlobais.join('\n\n')}`,
+            'erro'
+          );
+          return;
+        }
+      } else {
+        // ============================================
+        // PROCESSO NORMAL: validar apenas o departamento atual
+        // ============================================
+        const departamentoAtual = departamentos.find(d => d.id === processoCompleto.departamentoAtual);
+
+        if (departamentoAtual) {
+          const questionarios = processoCompleto.questionariosPorDepartamento?.[departamentoAtual.id] || [];
+          const respostas = processoCompleto.respostasHistorico?.[departamentoAtual.id]?.respostas || {};
+
+          const perguntasObrigatorias = questionarios.filter((q: any) => q.obrigatorio);
+          const documentosObrigatorios = departamentoAtual.documentosObrigatorios || [];
+
+          if (perguntasObrigatorias.length > 0 || documentosObrigatorios.length > 0) {
+            const validacao = validarAvancoDepartamento({
+              processo: processoCompleto as any,
+              departamento: departamentoAtual,
+              questionarios: questionarios.map((q: any) => ({
+                id: q.id,
+                label: q.label || 'Pergunta',
+                tipo: q.tipo || 'text',
+                obrigatorio: q.obrigatorio || false,
+                opcoes: Array.isArray(q.opcoes) ? q.opcoes : [],
+                condicao: q.condicao || (q.condicaoPerguntaId ? {
+                  perguntaId: q.condicaoPerguntaId,
+                  operador: q.condicaoOperador || 'igual',
+                  valor: q.condicaoValor || '',
+                } : undefined),
+              })),
+              documentos: documentos,
+              respostas: respostas,
+            });
+
+            if (!validacao.valido) {
+              const errosCriticos = validacao.erros.filter(e => e.tipo === 'erro');
+              const mensagem = errosCriticos.map(e => e.mensagem).join('\n');
+
+              setGlobalLoading(false);
+              await mostrarAlerta(
+                'Requisitos Obrigatórios Pendentes',
+                `Complete os seguintes itens antes de finalizar:\n\n${mensagem}`,
+                'erro'
+              );
+              return;
+            }
+          }
         }
       }
-      
-      console.log('======================');
       
       // ============================================
       // VALIDAÇÃO PASSOU - FINALIZAR PROCESSO
@@ -1368,6 +1430,15 @@ useEffect(() => {
       setProcessos(prev => prev.map(p => p.id === processoId ? processoAtualizado : p));
       
       adicionarNotificacao('Processo finalizado com sucesso', 'sucesso');
+      api.registrarLog?.({ acao: 'FINALIZAR', entidade: 'PROCESSO', entidadeId: processoId });
+
+      // Retornar info sobre interligação para o caller decidir mostrar modal
+      return {
+        finalizado: true,
+        processoId,
+        interligadoComId: processoCompleto.interligadoComId ?? null,
+        processoNome: processoCompleto.nomeEmpresa || processoCompleto.nome || `#${processoId}`,
+      };
     } catch (error: any) {
       console.error('Erro ao finalizar:', error);
       adicionarNotificacao(error.message || 'Erro ao finalizar processo', 'erro');
@@ -1446,6 +1517,7 @@ useEffect(() => {
       const processoAtualizado = await api.getProcesso(processoId);
       setProcessos(prev => prev.map(p => p.id === processoId ? processoAtualizado : p));
       adicionarNotificacao('Processo retornado ao departamento anterior', 'sucesso');
+      api.registrarLog?.({ acao: 'VOLTAR', entidade: 'PROCESSO', entidadeId: processoId });
     } catch (error: any) {
       adicionarNotificacao(error.message || 'Erro ao retornar processo', 'erro');
       throw error;
@@ -1584,6 +1656,7 @@ useEffect(() => {
     criarEmpresa,
     atualizarEmpresa,
     excluirEmpresa,
+    carregarEmpresas,
     criarTemplate,
     excluirTemplate,
     criarProcesso,

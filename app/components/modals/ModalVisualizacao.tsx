@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, CheckCircle, Star, ArrowRight, FileText, Eye, Download, MessageSquare, ArrowLeft, MoreHorizontal, Activity, FileDown } from 'lucide-react';
+import { X, Calendar, CheckCircle, Star, ArrowRight, FileText, Eye, Download, MessageSquare, ArrowLeft, MoreHorizontal, Activity, FileDown, Link2 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import { formatarDataHora, formatarNomeArquivo } from '@/app/utils/helpers';
@@ -87,15 +87,17 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
     .filter(Boolean) as any[];
 
   // Mostrar apenas até o departamento atual para evitar expor respostas de etapas posteriores
-  // Determine the index of the current department by matching the department ID first
+  // Para processos com departamentos paralelos (deptIndependente), mostrar TODOS os departamentos
   const idxById = departamentosOrdenados.findIndex((d: any) => Number(d?.id) === Number(processo?.departamentoAtual));
   const departamentoAtualIndex = idxById >= 0
     ? idxById
     : (Number.isFinite(Number(processo?.departamentoAtualIndex)) ? Number(processo.departamentoAtualIndex) : -1);
 
-  const departamentosVisiveis = departamentoAtualIndex >= 0
-    ? departamentosOrdenados.slice(0, departamentoAtualIndex + 1)
-    : departamentosOrdenados;
+  const departamentosVisiveis = processo?.deptIndependente
+    ? departamentosOrdenados
+    : (departamentoAtualIndex >= 0
+        ? departamentosOrdenados.slice(0, departamentoAtualIndex + 1)
+        : departamentosOrdenados);
 
   const numero = (v: any) => {
     const n = Number(v);
@@ -222,6 +224,91 @@ export default function VisualizacaoCompleta({ processo, onClose }: Visualizacao
           {/* Conteúdo das Abas */}
           {abaAtiva === 'respostas' && (
             <>
+              {/* ===== QUESTIONÁRIOS DE PROCESSOS INTERLIGADOS (aparecem primeiro, como histórico) ===== */}
+              {Array.isArray((processo as any)?.respostasInterligadas) && (processo as any).respostasInterligadas.length > 0 && (
+                (processo as any).respostasInterligadas.map((interligado: any) => {
+                  const deptEntries = Object.entries(interligado.departamentos || {});
+                  if (deptEntries.length === 0) return null;
+                  return deptEntries.map(([deptIdStr, deptData]: [string, any]) => {
+                    const deptId = Number(deptIdStr);
+                    const dept = departamentos.find((d: any) => Number(d?.id) === deptId);
+                    const questionario = Array.isArray(deptData?.questionario) ? deptData.questionario : [];
+                    const respostas = deptData?.respostas || {};
+                    if (questionario.length === 0) return null;
+                    const IconeDept = dept ? getIconeDepartamento(dept.icone) : null;
+                    return (
+                      <div key={`interligado-${interligado.processoId}-${deptId}`} className="bg-white dark:bg-[var(--card)] rounded-xl p-6 border border-purple-300 dark:border-purple-600 shadow-sm relative">
+                        <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded-lg text-xs font-semibold max-w-[60%] text-right">
+                          <Link2 size={12} className="flex-shrink-0" />
+                          <span className="truncate">
+                            🔗 {interligado.processoNome}{interligado.processoEmpresa ? ` — ${interligado.processoEmpresa}` : ''} (#{interligado.processoId})
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-gray-800 dark:text-[var(--fg)] mb-4 flex items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            {IconeDept ? <IconeDept size={20} /> : null}
+                            <div className="min-w-0">
+                              <div className="truncate">{dept?.nome || `Departamento #${deptId}`} {dept?.responsavel ? `- ${dept.responsavel}` : ''}</div>
+                            </div>
+                          </div>
+                        </h4>
+                        {deptData?.respondidoPor && (
+                          <p className="text-xs text-gray-500 mb-3">Respondido por: {deptData.respondidoPor} {deptData?.respondidoEm ? `em ${new Date(deptData.respondidoEm).toLocaleDateString('pt-BR')}` : ''}</p>
+                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {questionario.map((pergunta: any) => {
+                            const valor = respostas[String(pergunta.id)];
+                            const hasValor = valor !== undefined && valor !== null && String(valor).trim() !== '';
+
+                            // Tratamento para checkbox
+                            let valorFormatado: any = valor;
+                            if (pergunta.tipo === 'checkbox' && hasValor) {
+                              try {
+                                const valores = typeof valor === 'string' ? JSON.parse(valor) : valor;
+                                valorFormatado = Array.isArray(valores)
+                                  ? valores
+                                      .map((v: any) => {
+                                        const s = String(v ?? '');
+                                        const m = s.match(/^\d+\|(.*)$/);
+                                        return m ? m[1] : s;
+                                      })
+                                      .filter((x: string) => x.trim())
+                                      .join(', ')
+                                  : String(valor);
+                              } catch {
+                                valorFormatado = String(valor);
+                              }
+                            }
+
+                            return (
+                              <div key={pergunta.id} className={pergunta.tipo === 'textarea' ? 'md:col-span-2' : ''}>
+                                <div className="bg-gray-50 dark:bg-[var(--muted)] rounded-lg p-4 border border-transparent dark:border-[var(--border)]">
+                                  <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">{pergunta.label}</label>
+                                  {hasValor ? (
+                                    <div className="text-gray-800 dark:text-[var(--fg)]">
+                                      {pergunta.tipo === 'textarea' ? (
+                                        <div className="whitespace-pre-wrap">{String(valorFormatado)}</div>
+                                      ) : typeof valor === 'boolean' ? (
+                                        valor ? 'Sim' : 'Não'
+                                      ) : (
+                                        String(valorFormatado)
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="text-sm text-gray-400 italic">Sem resposta</div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  });
+                })
+              )}
+
+              {/* ===== DEPARTAMENTOS DO PROCESSO ATUAL ===== */}
               {departamentosVisiveis.map((dept: any) => {
             const respostasDept = respostasPorDept[dept.id];
             

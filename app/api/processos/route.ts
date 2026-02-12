@@ -266,7 +266,7 @@ export async function POST(request: NextRequest) {
     const dataEntrega = parseDateMaybe(data?.dataEntrega) ?? addDays(dataInicio, 15);
 
     const responsavelIdRaw = data?.responsavelId;
-    const responsavelId = Number.isFinite(Number(responsavelIdRaw)) ? Number(responsavelIdRaw) : undefined;
+    let responsavelId = Number.isFinite(Number(responsavelIdRaw)) ? Number(responsavelIdRaw) : undefined;
 
     let responsavelNome: string | undefined;
     let responsavelAtivoId: number | undefined;
@@ -282,6 +282,26 @@ export async function POST(request: NextRequest) {
       }
       responsavelNome = resp.nome;
       responsavelAtivoId = resp.id;
+    } else {
+      // Auto-assign: busca o gerente do departamento inicial
+      try {
+        const gerente = await prisma.usuario.findFirst({
+          where: {
+            departamentoId: departamentoInicial,
+            cargo: 'GERENTE',
+            ativo: true,
+          },
+          select: { id: true, nome: true },
+        });
+        if (gerente) {
+          responsavelId = gerente.id;
+          responsavelNome = gerente.nome;
+          responsavelAtivoId = gerente.id;
+          console.log('[LOG] Auto-assign gerente do departamento inicial:', gerente.nome);
+        }
+      } catch (e) {
+        console.log('[LOG] Erro ao buscar gerente para auto-assign:', e);
+      }
     }
 
     const tProcesso = Date.now();
@@ -308,6 +328,10 @@ export async function POST(request: NextRequest) {
           progresso: data.progresso || 0,
           dataInicio,
           dataEntrega,
+          // Interligação e independência de departamentos
+          ...(data.interligadoComId ? { interligadoComId: Number(data.interligadoComId) } : {}),
+          ...(data.interligadoNome ? { interligadoNome: String(data.interligadoNome) } : {}),
+          ...(data.deptIndependente != null ? { deptIndependente: Boolean(data.deptIndependente) } : {}),
         },
         select: {
           id: true,
@@ -330,11 +354,33 @@ export async function POST(request: NextRequest) {
           progresso: true,
           dataInicio: true,
           dataEntrega: true,
+          interligadoComId: true,
+          interligadoNome: true,
+          deptIndependente: true,
         },
       });
       return proc;
     });
     console.log('[LOG] prisma.processo.create:', Date.now() - t0, 'ms');
+
+    // Se deptIndependente, criar entradas de checklist para cada departamento do fluxo
+    if (data.deptIndependente && Array.isArray(fluxoFinal) && fluxoFinal.length > 1) {
+      try {
+        await (prisma as any).checklistDepartamento.createMany({
+          data: fluxoFinal
+            .map((deptId: any) => Number(deptId))
+            .filter((deptId: number) => Number.isFinite(deptId) && deptId > 0)
+            .map((deptId: number) => ({
+              processoId: processo.id,
+              departamentoId: deptId,
+              concluido: false,
+            })),
+          skipDuplicates: true,
+        });
+      } catch (e) {
+        console.error('Erro ao criar checklist inicial:', e);
+      }
+    }
 
     // Notificação persistida: somente gerentes do departamento e responsável (se definido)
     try {
@@ -478,6 +524,49 @@ export async function POST(request: NextRequest) {
       },
     });
     console.log('[LOG] prisma.historicoEvento.create:', Date.now() - t0, 'ms');
+
+    // Se o processo é interligado com outro, registrar eventos de interligação em ambos
+    if (data.interligadoComId) {
+      const origemId = Number(data.interligadoComId);
+      const origemNome = data.interligadoNome ? String(data.interligadoNome) : `#${origemId}`;
+      const novoNome = processo.nomeServico || processo.nomeEmpresa || `#${processo.id}`;
+      try {
+        // Evento no processo NOVO: "Continuação de..."
+        await prisma.historicoEvento.create({
+          data: {
+            processoId: processo.id,
+            tipo: 'ALTERACAO',
+            acao: `🔗 Solicitação interligada — continuação de: ${origemNome}`,
+            responsavelId: user.id,
+            departamento: 'Sistema',
+            dataTimestamp: BigInt(Date.now() + 1),
+          },
+        });
+        // Evento no processo ORIGEM: "Nova solicitação criada como continuação"
+        await prisma.historicoEvento.create({
+          data: {
+            processoId: origemId,
+            tipo: 'ALTERACAO',
+            acao: `🔗 Nova solicitação interligada criada: ${novoNome} (#${processo.id})`,
+            responsavelId: user.id,
+            departamento: 'Sistema',
+            dataTimestamp: BigInt(Date.now() + 2),
+          },
+        });
+        // Registrar na tabela InterligacaoProcesso
+        await (prisma as any).interligacaoProcesso.create({
+          data: {
+            processoOrigemId: origemId,
+            processoDestinoId: processo.id,
+            criadoPorId: user.id,
+            automatica: true,
+          },
+        }).catch(() => { /* ignora se já existe */ });
+        console.log('[LOG] interligação registrada:', Date.now() - t0, 'ms');
+      } catch (e) {
+        console.error('Erro ao registrar interligação no histórico:', e);
+      }
+    }
     
     // Criar histórico de fluxo inicial
     if (data.departamentoAtual) {

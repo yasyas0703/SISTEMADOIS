@@ -131,7 +131,7 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
                 </div>
               </div>
             </div>
-            <h1 id="login-title" className="text-3xl font-bold text-center">Sistema de Abertura</h1>
+            <h1 id="login-title" className="text-3xl font-bold text-center">Controle de Tarefas</h1>
             <p id="login-desc" className="text-center text-white/90 mt-2">Gerenciamento de Processos</p>
           </div>
 
@@ -227,7 +227,7 @@ export default function ModalLogin({ onLogin }: ModalLoginProps) {
 
           {/* Footer */}
           <div className="p-4 border-t border-gray-200 dark:border-[var(--border)] text-center text-sm text-gray-600 dark:text-gray-300">
-            Versão 1.0 - Sistema de Abertura © 2026
+            Versão 1.0 - Controle de Tarefas © 2026
           </div>
         </div>
     </ModalBase>

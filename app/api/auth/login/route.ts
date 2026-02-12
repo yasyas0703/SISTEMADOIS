@@ -99,8 +99,16 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Limita envio: checa último código criado e impede novo envio se foi nos últimos 7 dias
-    const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+    // Limpa códigos expirados/usados antes de checar rate limit
+    await prisma.emailVerificationCode.deleteMany({
+      where: {
+        usuarioId: usuario.id,
+        OR: [{ used: true }, { expiresAt: { lt: new Date() } }],
+      },
+    });
+
+    // Rate limit: impede novo envio se o último código foi criado há menos de 2 minutos
+    const RATE_LIMIT_MS = 2 * 60 * 1000; // 2 minutos
     const last = await prisma.emailVerificationCode.findFirst({
       where: { usuarioId: usuario.id },
       orderBy: { createdAt: 'desc' },
@@ -108,9 +116,10 @@ export async function POST(request: NextRequest) {
 
     if (last) {
       const lastCreated = new Date(last.createdAt).getTime();
-      if (Date.now() - lastCreated < oneWeekMs) {
+      if (Date.now() - lastCreated < RATE_LIMIT_MS) {
+        const restanteSegundos = Math.ceil((RATE_LIMIT_MS - (Date.now() - lastCreated)) / 1000);
         return NextResponse.json(
-          { error: 'Um código já foi enviado recentemente. Aguarde uma semana para solicitar outro.' },
+          { error: `Um código já foi enviado recentemente. Aguarde ${restanteSegundos} segundos.` },
           { status: 429 }
         );
       }

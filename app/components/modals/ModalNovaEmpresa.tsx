@@ -20,7 +20,7 @@ export default function ModalNovaEmpresa({ onClose }: ModalNovaEmpresaProps) {
   const [usuariosResponsaveis, setUsuariosResponsaveis] = useState<Array<{ id: number; nome: string; email: string; role: string; ativo?: boolean }>>([]);
   const [erroUsuariosResponsaveis, setErroUsuariosResponsaveis] = useState<string | null>(null);
   const [nomeServico, setNomeServico] = useState("");
-  const [prazoEntrega, setPrazoEntrega] = useState<string>(""); // Nova: prazo de entrega
+  const [prazoEntrega, setPrazoEntrega] = useState<string>(new Date().toISOString().split('T')[0]); // Prazo de entrega — padrão: data atual
   const [empresaSelecionada, setEmpresaSelecionada] = useState<Empresa | null>(null);
   
   const [questionariosPorDept, setQuestionariosPorDept] = useState<any>({});

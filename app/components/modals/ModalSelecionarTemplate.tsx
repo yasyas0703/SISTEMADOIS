@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, FileText, Info, MoreVertical, Trash2, ClipboardList } from 'lucide-react';
+import { X, FileText, Info, MoreVertical, Trash2, Edit, ClipboardList, Link2 } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import { Template } from '@/app/types';
 import { api } from '@/app/utils/api';
@@ -9,15 +9,17 @@ import LoadingOverlay from '../LoadingOverlay';
 
 interface ModalSelecionarTemplateProps {
   onClose: () => void;
+  onEditTemplate?: (template: any) => void;
 }
 
-export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemplateProps) {
+export default function ModalSelecionarTemplate({ onClose, onEditTemplate }: ModalSelecionarTemplateProps) {
   const {
     usuarioLogado,
     criarProcesso,
     empresas,
     departamentos,
     templates,
+    processos,
     excluirTemplate: excluirTemplateContext,
     mostrarAlerta,
     mostrarConfirmacao,
@@ -25,7 +27,7 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
   
   const [empresaSelecionada, setEmpresaSelecionada] = useState<any>(null);
   const [responsavelId, setResponsavelId] = useState<number | null>(null);
-  const [prazoEntrega, setPrazoEntrega] = useState<string>(""); // Prazo de entrega
+  const [prazoEntrega, setPrazoEntrega] = useState<string>(new Date().toISOString().split('T')[0]); // Prazo de entrega — padrão: data atual
   const [usuariosResponsaveis, setUsuariosResponsaveis] = useState<Array<{ id: number; nome: string; email: string; role: string; ativo?: boolean }>>([]);
   const [erroUsuariosResponsaveis, setErroUsuariosResponsaveis] = useState<string | null>(null);
   const [templateSelecionado, setTemplateSelecionado] = useState<number | null>(null);
@@ -33,6 +35,8 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
   const [templateComTooltipNome, setTemplateComTooltipNome] = useState<number | null>(null);
   const [showMenuTemplate, setShowMenuTemplate] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [interligarCom, setInterligarCom] = useState<number | null>(null);
+  const [deptIndependente, setDeptIndependente] = useState(false);
 
   const templatesDisponiveis: Template[] = templates || [];
 
@@ -170,6 +174,11 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
         criadoPor: usuarioLogado?.nome,
         descricao: `Solicitação criada via template: ${template.nome}`,
         dataEntrega: prazoEntrega ? new Date(prazoEntrega) : undefined, // Prazo de entrega
+        ...(interligarCom ? {
+          interligadoComId: interligarCom,
+          interligadoNome: templatesDisponiveis.find(t => t.id === interligarCom)?.nome || `Template #${interligarCom}`,
+        } : {}),
+        ...(deptIndependente ? { deptIndependente: true } : {}),
       });
       onClose();
     } catch (error: any) {
@@ -363,6 +372,57 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
                 </p>
               )}
             </div>
+
+            {/* Interligação com outra solicitação (template/atividade) */}
+            {templatesDisponiveis.length > 1 && (
+              <div className="mt-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <Link2 className="inline w-4 h-4 mr-1" />
+                  Interligar com outra atividade <span className="text-gray-400 text-xs font-normal">(opcional)</span>
+                </label>
+                <select
+                  value={interligarCom || ''}
+                  onChange={(e) => setInterligarCom(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full px-4 py-3 border border-purple-300 dark:border-purple-700 rounded-xl focus:ring-2 focus:ring-purple-500 bg-purple-50 dark:bg-purple-900/20 text-gray-900 dark:text-[var(--fg)]"
+                >
+                  <option value="">Nenhuma (solicitação independente)</option>
+                  {templatesDisponiveis
+                    .filter(t => t.id !== templateSelecionado)
+                    .map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.nome}{t.descricao ? ` — ${t.descricao}` : ''}
+                      </option>
+                    ))}
+                </select>
+                {interligarCom && (
+                  <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                    🔗 Ao finalizar esta solicitação, a atividade selecionada será criada automaticamente como continuação.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Departamentos Independentes (paralelo) */}
+          <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4 border border-indigo-200 dark:border-indigo-700">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={deptIndependente}
+                onChange={(e) => setDeptIndependente(e.target.checked)}
+                className="mt-1 w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+              />
+              <div>
+                <span className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">
+                  ⚡ Departamentos trabalham em paralelo
+                </span>
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+                  Ative se cada departamento pode preencher seu questionário independentemente.
+                  A solicitação aparecerá em todos os departamentos do fluxo. O check (finalização)
+                  segue a ordem: dep 1 precisa dar check antes do 2, que precisa antes do 3, e assim por diante.
+                </p>
+              </div>
+            </label>
           </div>
 
           <div className="bg-cyan-50 rounded-xl p-4 border border-cyan-200">
@@ -504,14 +564,28 @@ export default function ModalSelecionarTemplate({ onClose }: ModalSelecionarTemp
                         </button>
 
                         {showMenuTemplate === template.id && (
-                          <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 z-50 min-w-[120px] overflow-hidden">
+                          <div className="absolute right-0 top-full mt-1 bg-white dark:bg-[var(--card)] rounded-lg shadow-xl border border-gray-200 dark:border-[var(--border)] z-50 min-w-[140px] overflow-hidden">
+                            {onEditTemplate && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowMenuTemplate(null);
+                                  onEditTemplate(template);
+                                }}
+                                className="w-full px-4 py-2.5 text-left text-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2 transition-colors"
+                              >
+                                <Edit size={14} />
+                                <span>Editar (cópia)</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 excluirTemplate(template.id, template.nome);
                               }}
-                              className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                              className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
                             >
                               <Trash2 size={14} />
                               <span>Excluir</span>

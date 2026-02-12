@@ -2,27 +2,31 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { Bell, Download, TrendingUp, Plus, FileText, Users, User, X, RefreshCw } from 'lucide-react';
+import { Bell, Download, TrendingUp, Plus, FileText, Users, User, X, Upload } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import { temPermissao as verificarPermissao } from '@/app/utils/permissions';
 import NotificacoesPanel from './NotificacoesPanel';
 
 interface HeaderProps {
   onNovaEmpresa: () => void;
-  onPersonalizado: () => void;
+  onAtividade: () => void;
   onGerenciarUsuarios: () => void;
   onAnalytics: () => void;
   onSelecionarTemplate: () => void;
   onLogout: () => void;
+  onLogs?: () => void;
+  onImportarPlanilha?: () => void;
 }
 
 export default function Header({
   onNovaEmpresa,
-  onPersonalizado,
+  onAtividade,
   onGerenciarUsuarios,
   onAnalytics,
   onSelecionarTemplate,
   onLogout,
+  onLogs,
+  onImportarPlanilha,
 }: HeaderProps) {
   const { notificacoes, usuarioLogado, realtimeInfo, setProcessos, setTags, setDepartamentos, setEmpresas, adicionarNotificacao, setGlobalLoading } = useSistema();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -73,10 +77,10 @@ export default function Header({
             <div className="min-w-0">
               <h1 className="leading-[1.05] tracking-tight">
                 <span className="block text-base md:text-lg font-bold text-gray-700 whitespace-nowrap">
-                  Sistema de
+                  Controle de
                 </span>
                 <span className="block -mt-0.5 text-2xl md:text-3xl font-extrabold text-gray-900 whitespace-nowrap">
-                  Abertura
+                  Tarefas
                 </span>
               </h1>
               <p
@@ -133,15 +137,15 @@ export default function Header({
                   <span className="hidden sm:inline">Nova Solicitação</span>
                 </button>
 
-                {/* Apenas admin e gerente podem criar solicitações personalizadas */}
+                {/* Apenas admin e gerente podem criar atividades */}
                 {temPermissao('criar_processo_personalizado') && (
                   <button
-                    onClick={onPersonalizado}
+                    onClick={onAtividade}
                     className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-4 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
-                    title="Criar Solicitação Personalizada (Ctrl+N)"
+                    title="Criar Atividade (Ctrl+N)"
                   >
                     <Plus size={20} />
-                    <span className="hidden sm:inline">Personalizada</span>
+                    <span className="hidden sm:inline">Atividade</span>
                   </button>
                 )}
               </div>
@@ -158,35 +162,19 @@ export default function Header({
               </button>
             )}
 
-            {/* Botão Recarregar dados (client-side) */}
-            <button
-              onClick={async () => {
-                try {
-                  setGlobalLoading?.(true);
-                  const [processos, tags, departamentos, empresas] = await Promise.all([
-                    // refresh principais listas sem forçar redirect
-                    (await import('@/app/utils/api')).api.getProcessos(),
-                    (await import('@/app/utils/api')).api.getTags(),
-                    (await import('@/app/utils/api')).api.getDepartamentos(),
-                    (await import('@/app/utils/api')).api.getEmpresas(),
-                  ]);
-                  setProcessos?.(processos || []);
-                  setTags?.(tags || []);
-                  setDepartamentos?.(departamentos || []);
-                  setEmpresas?.(empresas || []);
-                  adicionarNotificacao?.('Dados recarregados', 'sucesso');
-                } catch (err: any) {
-                  console.error('Erro ao recarregar dados:', err);
-                  adicionarNotificacao?.(err?.message || 'Erro ao recarregar dados', 'erro');
-                } finally {
-                  setGlobalLoading?.(false);
-                }
-              }}
-              className="p-3 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
-              title="Recarregar dados (cliente)"
-            >
-              <RefreshCw size={18} className="text-gray-600" />
-            </button>
+            {/* Botão Importar Planilha - apenas admin */}
+            {temPermissao('gerenciar_usuarios') && onImportarPlanilha && (
+              <button
+                onClick={onImportarPlanilha}
+                className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white px-4 py-3 rounded-xl font-medium flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap"
+                title="Importar empresas via planilha CSV"
+              >
+                <Upload size={20} />
+                <span className="hidden sm:inline">Importar</span>
+              </button>
+            )}
+
+
 
             {/* Info Usuário */}
             {usuarioLogado && (

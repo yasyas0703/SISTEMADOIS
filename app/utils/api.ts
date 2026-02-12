@@ -334,14 +334,20 @@ const normalizeProcesso = (raw: any) => {
     })
     .filter((q: any) => Number.isFinite(q?.id));
 
-  return {
+  const resultado = {
     ...raw,
     nomeEmpresa: raw?.nomeEmpresa ?? raw?.empresa ?? 'Nova Empresa',
     status: normalizeStatus(raw?.status),
     prioridade: normalizePrioridade(raw?.prioridade),
     departamentoAtual: Number(raw?.departamentoAtual ?? 0),
     departamentoAtualIndex: Number(raw?.departamentoAtualIndex ?? 0),
-    fluxoDepartamentos: Array.isArray(raw?.fluxoDepartamentos) ? raw.fluxoDepartamentos : [],
+    fluxoDepartamentos: Array.isArray(raw?.fluxoDepartamentos)
+      ? raw.fluxoDepartamentos.map((v: any) => Number(v)).filter((v: number) => Number.isFinite(v) && v > 0)
+      : [],
+    // Campos explícitos para departamentos independentes e interligação
+    deptIndependente: Boolean(raw?.deptIndependente),
+    interligadoComId: raw?.interligadoComId ? Number(raw.interligadoComId) : null,
+    interligadoNome: raw?.interligadoNome ?? null,
     tags: tagsIds,
     tagsMetadata,
     comentarios,
@@ -351,9 +357,11 @@ const normalizeProcesso = (raw: any) => {
     questionarios,
     questionariosPorDepartamento,
     respostasHistorico,
+    respostasInterligadas: Array.isArray(raw?.respostasInterligadas) ? raw.respostasInterligadas : [],
     historico,
     historicoEvento: historico,
   };
+  return resultado;
 };
 
 async function parseError(response: Response) {
@@ -597,10 +605,11 @@ export const api = {
     }
   },
 
-  excluirProcesso: async (id: number) => {
+  excluirProcesso: async (id: number, motivoExclusao?: string, motivoExclusaoCustom?: string) => {
     try {
       const response = await fetchAutenticado(`${API_URL}/processos/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        body: JSON.stringify({ motivoExclusao, motivoExclusaoCustom }),
       });
       if (!response.ok) {
         throw new Error('Erro ao excluir processo');
@@ -842,6 +851,10 @@ export const api = {
         editadoEm: c.editadoEm ?? undefined,
         mencoes: Array.isArray(c.mencoes) ? c.mencoes : [],
         parentId: c.parentId ?? null,
+        // Campos de interligação
+        isInterligado: c.isInterligado ?? false,
+        processoOrigemId: c.processoOrigemId ?? c.processoId,
+        processoOrigemNome: c.processoOrigemNome ?? '',
       }));
     } catch (error) {
       console.error('Erro ao carregar comentários:', error);
@@ -1510,6 +1523,74 @@ export const api = {
       return api.removerFavorito(processoId);
     } else {
       return api.adicionarFavorito(processoId);
+    }
+  },
+
+  // ========== LOGS DE AUDITORIA ==========
+  getLogs: async (params?: { acao?: string; entidade?: string; limite?: number }) => {
+    try {
+      const search = new URLSearchParams();
+      if (params?.acao) search.set('acao', params.acao);
+      if (params?.entidade) search.set('entidade', params.entidade);
+      if (params?.limite) search.set('limite', String(params.limite));
+      const qs = search.toString();
+      const response = await fetchAutenticado(`${API_URL}/logs${qs ? `?${qs}` : ''}`);
+      if (!response.ok) return [];
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao buscar logs:', error);
+      return [];
+    }
+  },
+
+  registrarLog: async (data: {
+    acao: string;
+    entidade: string;
+    entidadeId?: number;
+    entidadeNome?: string;
+    campo?: string;
+    valorAnterior?: string;
+    valorNovo?: string;
+    detalhes?: string;
+    processoId?: number;
+    empresaId?: number;
+    departamentoId?: number;
+  }) => {
+    try {
+      await fetchAutenticado(`${API_URL}/logs`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    } catch {
+      // Silencioso - não deve impedir operações normais
+    }
+  },
+
+  // ========== PROCESSOS EXCLUÍDOS ANALYTICS ==========
+  getProcessosExcluidos: async () => {
+    try {
+      const response = await fetchAutenticado(`${API_URL}/analytics?tipo=excluidos`);
+      if (!response.ok) return [];
+      return await response.json();
+    } catch {
+      return [];
+    }
+  },
+
+  // ========== IMPORTAR EMPRESAS ==========
+  importarEmpresas: async (empresas: any[]) => {
+    try {
+      const response = await fetchAutenticado(`${API_URL}/empresas`, {
+        method: 'POST',
+        body: JSON.stringify({ bulk: true, empresas }),
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response));
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao importar empresas:', error);
+      throw error;
     }
   },
 };

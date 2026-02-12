@@ -1,7 +1,7 @@
 // app/components/sections/DepartamentosGrid.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Building, User, Plus, MoreVertical, Edit, Trash2, Eye, FileText, Users, Calculator, FileCheck, Briefcase, Headphones, Scale, CheckCircle, Building2, Landmark, ShieldCheck, Truck, Package, Heart, Wallet, CreditCard, BarChart3, PieChart, Settings, Wrench, Globe, Mail, Phone, MessageSquare, Clipboard, FolderOpen, Archive, BookOpen, GraduationCap, Award, Target, Flag, Zap, Star, ChevronLeft, ChevronRight, ArrowLeftRight } from 'lucide-react';
 import { useSistema } from '@/app/context/SistemaContext';
 import { api } from '@/app/utils/api';
@@ -58,6 +58,8 @@ interface DepartamentosGridProps {
   onGaleria: (dept: any) => void;
   favoritosIds?: Set<number>;
   onToggleFavorito?: (processoId: number) => void;
+  onExcluirProcesso?: (processo: any) => void;
+  onFinalizarProcesso?: (processoId: number) => Promise<void>;
 }
 
 export default function DepartamentosGrid({
@@ -68,6 +70,8 @@ export default function DepartamentosGrid({
   onGaleria,
   favoritosIds,
   onToggleFavorito,
+  onExcluirProcesso,
+  onFinalizarProcesso,
 }: DepartamentosGridProps) {
   const {
     departamentos,
@@ -82,6 +86,8 @@ export default function DepartamentosGrid({
     avancarParaProximoDepartamento,
     finalizarProcesso,
     mostrarConfirmacao,
+    mostrarAlerta,
+    adicionarNotificacao,
   } = useSistema();
 
   const { handleDragStart, handleDragOver, handleDrop, handleDragEnd, dragState } = useDragDrop();
@@ -89,6 +95,40 @@ export default function DepartamentosGrid({
   const [menuDeptAberto, setMenuDeptAberto] = useState<number | null>(null);
   const [movendo, setMovendo] = useState(false);
   const [modoReordenar, setModoReordenar] = useState(false);
+
+  // Checklist cache para processos deptIndependente
+  // Mapa: processoId -> Set<deptId> (departamentos já concluídos)
+  const [checklistCache, setChecklistCache] = useState<Map<number, Set<number>>>(new Map());
+
+  // Buscar checklist para processos com deptIndependente
+  const processosParalelos = (processos || []).filter(
+    (p: any) => p.deptIndependente && p.status === 'em_andamento' && Array.isArray(p.fluxoDepartamentos) && p.fluxoDepartamentos.length > 1
+  );
+
+  useEffect(() => {
+    if (processosParalelos.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const novoCache = new Map<number, Set<number>>();
+      await Promise.all(
+        processosParalelos.map(async (p: any) => {
+          try {
+            const res = await fetch(`/api/processos/${p.id}/checklist`, { credentials: 'include' });
+            if (!res.ok) return;
+            const data = await res.json();
+            const concluidos = new Set<number>();
+            (Array.isArray(data) ? data : []).forEach((item: any) => {
+              if (item.concluido) concluidos.add(Number(item.departamentoId));
+            });
+            novoCache.set(p.id, concluidos);
+          } catch { /* silencioso */ }
+        })
+      );
+      if (!cancelled) setChecklistCache(novoCache);
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processosParalelos.map(p => p.id).join(',')]);
 
   const isAdmin = usuarioLogado?.role === 'admin';
   const isUsuarioNormal = usuarioLogado?.role === 'usuario';
@@ -100,15 +140,143 @@ export default function DepartamentosGrid({
         ? (usuarioLogado as any).departamento_id
         : undefined;
 
-  const handleQuestionario = (processo: any) => {
+  const handleQuestionario = (processo: any, deptIdOverride?: number) => {
+    // Para processos paralelos (deptIndependente), usar o dept da coluna onde o card está,
+    // não o departamentoAtual (que pode ser o 1º dept do fluxo)
+    const deptId = deptIdOverride ?? processo.departamentoAtual;
     setShowQuestionario({
       processoId: processo.id,
-      departamento: processo.departamentoAtual,
+      departamento: deptId,
     });
   };
 
   const handleDocumentos = (processo: any) => {
     setShowUploadDocumento(processo);
+  };
+
+  // Handler para "Avançar" em processos paralelos (deptIndependente)
+  // Marca o departamento como concluído no checklist, removendo o card da coluna
+  const handleAvancarParalelo = async (processoId: number, deptId: number) => {
+    const processo = processos.find((p: any) => p.id === processoId);
+    if (!processo) return;
+
+    const fluxo = (processo.fluxoDepartamentos || []).map(Number);
+    const idxDept = fluxo.indexOf(Number(deptId));
+
+    // Verificar ordem sequencial: dept anterior precisa ter concluído
+    if (idxDept > 0) {
+      const deptAnterior = fluxo[idxDept - 1];
+      const concluidos = checklistCache.get(processoId);
+      if (!concluidos || !concluidos.has(deptAnterior)) {
+        const nomeAnterior = departamentos.find((d: any) => d.id === deptAnterior)?.nome || `Dept #${deptAnterior}`;
+        void mostrarAlerta?.('Ordem sequencial', `O departamento "${nomeAnterior}" precisa concluir primeiro antes que este possa avançar.`, 'aviso');
+        return;
+      }
+    }
+
+    // ============================================
+    // VALIDAÇÃO DE PERGUNTAS OBRIGATÓRIAS DO DEPT
+    // ============================================
+    try {
+      // Buscar processo atualizado para ter respostas e questionários frescos
+      const processoAtualizado = await api.getProcesso(processoId).catch(() => null);
+      const pDados = processoAtualizado ?? processo;
+
+      const questionariosDoDept =
+        (pDados.questionariosPorDepartamento && (pDados.questionariosPorDepartamento[String(deptId)] ?? pDados.questionariosPorDepartamento[deptId])) || [];
+
+      const respostasSalvas = ((pDados.respostasHistorico as any)?.[deptId]?.respostas) || {};
+      const docs = Array.isArray(pDados.documentos) ? pDados.documentos : [];
+
+      const avaliarCondicaoLocal = (pergunta: any, respostasAtuais: Record<string, any>) => {
+        if (!pergunta || !pergunta.condicao) return true;
+        const { perguntaId, operador, valor } = pergunta.condicao;
+        const respostaCond = respostasAtuais[String(perguntaId)];
+        if (respostaCond === undefined || respostaCond === null || respostaCond === '') return false;
+        const r = String(respostaCond).trim().toLowerCase();
+        const v = String(valor).trim().toLowerCase();
+        switch (operador) {
+          case 'igual': return r === v;
+          case 'diferente': return r !== v;
+          case 'contem': return r.includes(v);
+          default: return true;
+        }
+      };
+
+      const faltando = (Array.isArray(questionariosDoDept) ? questionariosDoDept : [])
+        .filter((p: any) => p && p.obrigatorio)
+        .filter((p: any) => {
+          if (!avaliarCondicaoLocal(p, respostasSalvas)) return false;
+          if (p.tipo === 'file') {
+            const anexosVisiveis = docs.filter((d: any) => {
+              const dPerg = Number(d?.perguntaId ?? d?.pergunta_id);
+              if (dPerg !== Number(p.id)) return false;
+              const dDeptRaw = d?.departamentoId ?? d?.departamento_id;
+              const dDept = Number(dDeptRaw);
+              if (!Number.isFinite(dDept)) return true;
+              return dDept === Number(deptId);
+            });
+            if (anexosVisiveis.length > 0) return false;
+            const counts: Record<string, number> = (pDados as any)?.documentosCounts ?? {};
+            const keySpecific = `${Number(p.id)}:${Number(deptId)}`;
+            const keyAny = `${Number(p.id)}:0`;
+            const total = Number(counts[keySpecific] ?? counts[keyAny] ?? 0);
+            return total === 0;
+          }
+          const r = respostasSalvas[String(p.id)];
+          if (r === null || r === undefined) return true;
+          if (typeof r === 'string' && !r.trim()) return true;
+          return false;
+        });
+
+      if (faltando.length > 0) {
+        const nomes = faltando.map((p: any) => p.label).join(', ');
+        const nomeDept = departamentos.find((d: any) => d.id === deptId)?.nome || `Dept #${deptId}`;
+        void mostrarAlerta?.('Campos obrigatórios', `Preencha os campos obrigatórios do departamento "${nomeDept}" antes de concluir:\n\n${nomes}`, 'aviso');
+        return;
+      }
+    } catch (err) {
+      console.warn('Validação de questionário paralelo falhou:', err);
+    }
+
+    try {
+      // Marcar o departamento como concluído via API de checklist
+      const res = await fetch(`/api/processos/${processoId}/checklist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ departamentoId: deptId, concluido: true }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Erro ao concluir' }));
+        void mostrarAlerta?.('Erro', err.error || 'Erro ao concluir departamento', 'erro');
+        return;
+      }
+
+      // Atualizar cache local imediatamente (UI otimista)
+      setChecklistCache(prev => {
+        const next = new Map(prev);
+        const set = new Set(prev.get(processoId) || []);
+        set.add(Number(deptId));
+        next.set(processoId, set);
+        return next;
+      });
+
+      const nomeDepto = departamentos.find((d: any) => d.id === deptId)?.nome || `Dept #${deptId}`;
+      adicionarNotificacao(`Departamento "${nomeDepto}" concluiu sua parte`, 'sucesso');
+
+      // Se todos os depts do fluxo concluíram, finalizar o processo
+      const concluidosAtualizado = new Set(checklistCache.get(processoId) || []);
+      concluidosAtualizado.add(Number(deptId));
+      const todosConcluiram = fluxo.every((id: number) => concluidosAtualizado.has(id));
+      if (todosConcluiram) {
+        adicionarNotificacao('Todos os departamentos concluíram! Processo finalizado.', 'sucesso');
+        await finalizarProcesso(processoId);
+      }
+    } catch (err: any) {
+      void mostrarAlerta?.('Erro', err.message || 'Erro ao avançar', 'erro');
+    }
   };
 
   const handleComentarios = (processo: any) => {
@@ -178,7 +346,7 @@ export default function DepartamentosGrid({
 
   if (departamentos.length === 0) {
     return (
-      <div className="col-span-4 text-center py-12">
+      <div className="col-span-full text-center py-12">
         <Building size={64} className="mx-auto text-gray-300 mb-4" />
         <h3 className="text-xl font-semibold text-gray-700 mb-2">
           Nenhum departamento criado
@@ -228,7 +396,7 @@ export default function DepartamentosGrid({
     <>
       {/* Botão de reordenar departamentos (apenas admin) */}
       {isAdmin && departamentosOrdenados.length > 1 && (
-        <div className="col-span-full flex justify-end mb-2">
+        <div className="w-full flex justify-end mb-2 col-span-full">
           <button
             type="button"
             onClick={() => setModoReordenar((prev) => !prev)}
@@ -245,9 +413,28 @@ export default function DepartamentosGrid({
       )}
 
       {departamentosOrdenados.map((dept, posicao) => {
-        const processosNoDept = processos.filter(
-          (p) => p.departamentoAtual === dept.id && p.status === 'em_andamento'
-        );
+        const processosNoDept = processos.filter((p) => {
+          if (p.status !== 'em_andamento') return false;
+
+          // Fluxo paralelo (deptIndependente): usa APENAS a lógica de checklist
+          // Processo aparece em TODOS os depts do fluxo, EXCETO nos que já concluíram
+          if (
+            p.deptIndependente &&
+            Array.isArray(p.fluxoDepartamentos) &&
+            p.fluxoDepartamentos.length > 1
+          ) {
+            const estaNeste = p.fluxoDepartamentos.some((id: any) => Number(id) === Number(dept.id));
+            if (!estaNeste) return false;
+            const concluidos = checklistCache.get(p.id);
+            if (concluidos && concluidos.has(Number(dept.id))) return false; // já deu check → some
+            return true;
+          }
+
+          // Fluxo normal: processo está no departamento atual
+          if (p.departamentoAtual === dept.id) return true;
+
+          return false;
+        });
 
         // Usar cor configurada no departamento; fallback azul
         const corFundo = typeof dept.cor === 'string' ? dept.cor : 'from-blue-500 to-blue-600';
@@ -256,7 +443,7 @@ export default function DepartamentosGrid({
         const isLast = posicao === departamentosOrdenados.length - 1;
 
         return (
-          <div key={dept.id} className="relative">
+          <div key={dept.id} className="relative w-full min-w-0">
             {/* Setas de reordenação */}
             {modoReordenar && isAdmin && (
               <div className="flex items-center justify-center gap-2 mb-2">
@@ -463,25 +650,35 @@ export default function DepartamentosGrid({
                         <ProcessoCard
                           processo={processo}
                           departamento={dept}
-                          onQuestionario={handleQuestionario}
+                          onQuestionario={(p) => handleQuestionario(p, dept.id)}
                           onDocumentos={handleDocumentos}
                           onComentarios={handleComentarios}
                           onTags={handleTags}
                           onExcluir={async (id: number) => {
-                            const ok = await mostrarConfirmacao({
-                              titulo: 'Excluir Processo',
-                              mensagem: 'Tem certeza que deseja excluir este processo?\n\nEssa ação não poderá ser desfeita.',
-                              tipo: 'perigo',
-                              textoConfirmar: 'Sim, Excluir',
-                              textoCancelar: 'Cancelar',
-                            });
-                            if (ok) excluirProcesso(id);
+                            if (onExcluirProcesso) {
+                              onExcluirProcesso(processo);
+                            } else {
+                              const ok = await mostrarConfirmacao({
+                                titulo: 'Excluir Processo',
+                                mensagem: 'Tem certeza que deseja excluir este processo?\n\nEssa ação não poderá ser desfeita.',
+                                tipo: 'perigo',
+                                textoConfirmar: 'Sim, Excluir',
+                                textoCancelar: 'Cancelar',
+                              });
+                              if (ok) excluirProcesso(id);
+                            }
                           }}
-                          onAvancar={(id: number) => {
-                            avancarParaProximoDepartamento(id);
-                            return Promise.resolve();
+                          onAvancar={async (id: number) => {
+                            if (processo.deptIndependente) {
+                              await handleAvancarParalelo(id, dept.id);
+                            } else {
+                              await avancarParaProximoDepartamento(id);
+                            }
                           }}
                           onFinalizar={(id: number) => {
+                            if (onFinalizarProcesso) {
+                              return onFinalizarProcesso(id);
+                            }
                             finalizarProcesso(id);
                             return Promise.resolve();
                           }}

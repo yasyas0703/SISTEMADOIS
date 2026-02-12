@@ -6,7 +6,7 @@ import ThemeToggle from "@/app/components/ThemeToggle";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sistema de Abertura",
+  title: "Controle de Tarefas",
   description: "Gerenciamento de Processos e Departamentos",
 };
 

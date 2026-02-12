@@ -4,10 +4,11 @@ import React, { useState, useEffect } from 'react';
 import {
   X, MessageSquare, FileText, Eye, CheckCircle, Clock, Calendar,
   User, AlertCircle, Tag, ArrowRight, Trash2, MoreVertical,
-  Upload, Download, Edit, Flag, Zap, Activity, ArrowLeft
+  Upload, Download, Edit, Flag, Zap, Activity, ArrowLeft, Layers
 } from 'lucide-react';
 import { Processo } from '@/app/types';
 import HistoricoTimeline from './HistoricoTimeline';
+import ChecklistFluxo from './ChecklistFluxo';
 import { buscarHistorico } from '@/app/utils/auditoria';
 import { verificarMencoesNaoLidasPorNotificacoes } from '@/app/utils/mentions';
 import { useSistema } from '@/app/context/SistemaContext';
@@ -41,6 +42,17 @@ export default function ProcessoDetalhado({
   const [activeTab, setActiveTab] = useState('detalhes');
   const [historicoCompleto, setHistoricoCompleto] = useState<any[]>([]);
   const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+  const [checklistData, setChecklistData] = useState<any[]>([]);
+
+  // Carregar checklist para mostrar depts concluídos
+  useEffect(() => {
+    if (processo.deptIndependente && Array.isArray(processo.fluxoDepartamentos) && processo.fluxoDepartamentos.length > 1) {
+      fetch(`/api/processos/${processo.id}/checklist`, { credentials: 'include' })
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setChecklistData(Array.isArray(data) ? data : []))
+        .catch(() => setChecklistData([]));
+    }
+  }, [processo.id, processo.deptIndependente, processo.fluxoDepartamentos]);
 
   // Carregar histórico completo quando a aba for selecionada
   useEffect(() => {
@@ -255,6 +267,76 @@ export default function ProcessoDetalhado({
                 <X size={20} />
               </button>
             </div>
+
+            {/* Checklist por Departamento */}
+            {processo.fluxoDepartamentos && Array.isArray(processo.fluxoDepartamentos) && processo.fluxoDepartamentos.length > 1 && (
+              <div className="bg-gray-50 dark:bg-[var(--muted)] p-6 rounded-xl">
+                <ChecklistFluxo
+                  processoId={processo.id}
+                  fluxoDepartamentos={processo.fluxoDepartamentos as number[]}
+                  departamentos={departamentos || []}
+                  departamentoAtual={processo.departamentoAtual}
+                  deptIndependente={processo.deptIndependente}
+                  readOnly={processo.status === 'finalizado'}
+                />
+              </div>
+            )}
+
+            {/* Histórico de departamentos que deram check (paralelo) */}
+            {processo.deptIndependente && checklistData.length > 0 && (() => {
+              const fluxo: number[] = Array.isArray(processo.fluxoDepartamentos) ? processo.fluxoDepartamentos as number[] : [];
+              const concluidos = checklistData
+                .filter((c: any) => c.concluido)
+                .sort((a: any, b: any) => fluxo.indexOf(a.departamentoId) - fluxo.indexOf(b.departamentoId));
+              if (concluidos.length === 0) return null;
+              return (
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 p-5 rounded-xl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Layers size={18} className="text-emerald-600 dark:text-emerald-400" />
+                    <h3 className="text-sm font-bold text-emerald-800 dark:text-emerald-300">
+                      Departamentos que deram Check ({concluidos.length}/{fluxo.length})
+                    </h3>
+                  </div>
+                  <div className="space-y-2">
+                    {concluidos.map((c: any) => {
+                      const deptNome = (departamentos || []).find((d: any) => d.id === c.departamentoId)?.nome || `Dept #${c.departamentoId}`;
+                      const ordem = fluxo.indexOf(c.departamentoId) + 1;
+                      return (
+                        <div key={c.departamentoId} className="flex items-center gap-3 bg-white dark:bg-gray-800 px-4 py-2.5 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                          <span className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                            {ordem}
+                          </span>
+                          <CheckCircle size={16} className="text-emerald-500 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{deptNome}</span>
+                            {c.concluidoEm && (
+                              <span className="text-xs text-gray-500 ml-2">
+                                concluído {new Date(c.concluidoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {concluidos.length < fluxo.length && (
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-3">
+                      ⏳ Aguardando {fluxo.length - concluidos.length} departamento(s) restante(s) para concluir.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Interligação */}
+            {processo.interligadoComId && (
+              <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 p-4 rounded-xl">
+                <div className="flex items-center gap-2 text-sm text-purple-700 dark:text-purple-300">
+                  <span className="text-lg">🔗</span>
+                  <span>Interligada com: <strong>{processo.interligadoNome || `#${processo.interligadoComId}`}</strong></span>
+                </div>
+              </div>
+            )}
 
             {/* Últimas Atividades */}
             <div className="bg-gray-50 dark:bg-[var(--muted)] p-6 rounded-xl">

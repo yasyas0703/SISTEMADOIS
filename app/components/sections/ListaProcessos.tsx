@@ -122,8 +122,17 @@ export default function ListaProcessos({
     }
 
     // Filtro por departamento
-    if (filtroDepartamento && proc.departamentoAtual !== filtroDepartamento) {
-      return false;
+    if (filtroDepartamento) {
+      // Se deptIndependente, o processo aparece em todos os depts do fluxo
+      if (
+        proc.deptIndependente &&
+        Array.isArray(proc.fluxoDepartamentos) &&
+        proc.fluxoDepartamentos.some((id: any) => Number(id) === Number(filtroDepartamento))
+      ) {
+        // aparece
+      } else if (proc.departamentoAtual !== filtroDepartamento) {
+        return false;
+      }
     }
 
     return true;

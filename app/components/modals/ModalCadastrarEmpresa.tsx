@@ -183,7 +183,7 @@ export default function ModalCadastrarEmpresa({ onClose, empresa }: ModalCadastr
       // Se selecionou empresa cadastrada, precisa ter CNPJ válido
       cadastrada = temCnpjValido;
     } else {
-      // Se selecionou empresa nova mas tem CNPJ válido, considera cadastrada
+      // Se selecionou empresa nova, mas tem CNPJ válido, considera cadastrada
       cadastrada = temCnpjValido;
     }
 

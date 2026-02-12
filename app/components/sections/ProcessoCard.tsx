@@ -13,6 +13,10 @@ import {
   Upload,
   X,
   Loader2,
+  Edit3,
+  Save,
+  User as UserIcon,
+  Building2,
 } from 'lucide-react';
 import { Processo } from '@/app/types';
 import { useSistema } from '@/app/context/SistemaContext';
@@ -52,7 +56,7 @@ export default function ProcessoCard({
   favoritosIds,
   onToggleFavorito,
 }: ProcessoCardProps) {
-  const { tags, departamentos, atualizarProcesso, usuarioLogado, mostrarAlerta, notificacoes } = useSistema();
+  const { tags, departamentos, atualizarProcesso, usuarioLogado, mostrarAlerta, notificacoes, usuarios } = useSistema();
   
   const isFavorito = favoritosIds?.has(processo.id) || false;
   const [toggling, setToggling] = useState(false);
@@ -124,6 +128,38 @@ export default function ProcessoCard({
 
   // Removed inline dark-mode color overrides to rely on Tailwind classes
 
+  const [editando, setEditando] = useState(false);
+  const [editNomeEmpresa, setEditNomeEmpresa] = useState(processo.nomeEmpresa || '');
+  const [editResponsavelId, setEditResponsavelId] = useState<number | undefined>((processo as any).responsavelId);
+  const [editCliente, setEditCliente] = useState(processo.cliente || '');
+  const [salvandoEdit, setSalvandoEdit] = useState(false);
+
+  // Sincronizar estado de edição quando o processo muda
+  useEffect(() => {
+    setEditNomeEmpresa(processo.nomeEmpresa || '');
+    setEditResponsavelId((processo as any).responsavelId);
+    setEditCliente(processo.cliente || '');
+  }, [processo.nomeEmpresa, (processo as any).responsavelId, processo.cliente]);
+
+  const handleSaveEdit = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSalvandoEdit(true);
+    try {
+      const updates: any = {};
+      if (editNomeEmpresa !== (processo.nomeEmpresa || '')) updates.nomeEmpresa = editNomeEmpresa;
+      if (editResponsavelId !== (processo as any).responsavelId) updates.responsavelId = editResponsavelId || null;
+      if (editCliente !== (processo.cliente || '')) updates.cliente = editCliente;
+      if (Object.keys(updates).length > 0) {
+        await atualizarProcesso(processo.id, updates);
+      }
+      setEditando(false);
+    } catch (err: any) {
+      mostrarAlerta('Erro', err?.message || 'Falha ao salvar', 'erro');
+    } finally {
+      setSalvandoEdit(false);
+    }
+  };
+
   const [prioridade, setPrioridade] = React.useState((processo.prioridade || 'media') as 'alta' | 'media' | 'baixa');
 
   React.useEffect(() => {
@@ -131,7 +167,9 @@ export default function ProcessoCard({
   }, [processo.prioridade]);
   const statusLabel = processo.status === 'finalizado' ? 'Finalizado' : 'Em Andamento';
 
-  const fluxo = processo.fluxoDepartamentos || [];
+  const fluxo = Array.isArray(processo.fluxoDepartamentos)
+    ? processo.fluxoDepartamentos.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id) && id > 0)
+    : [];
   const idxAtual = processo.departamentoAtualIndex || 0;
   const temFluxo = fluxo.length > 0;
 
@@ -157,8 +195,8 @@ export default function ProcessoCard({
 
   return (
     <div
-      className="bg-gray-50 rounded-xl p-4 cursor-move hover:bg-gray-100 transition-all duration-200 hover:shadow-md border border-gray-200 relative"
-      onClick={() => onVerDetalhes(processo)}
+      className="bg-gray-50 rounded-xl p-5 cursor-move hover:bg-gray-100 transition-all duration-200 hover:shadow-md border border-gray-200 relative"
+      onClick={() => !editando && onVerDetalhes(processo)}
     >
       {/* Indicador de Fixado - canto superior esquerdo */}
       {onToggleFavorito && (
@@ -180,27 +218,42 @@ export default function ProcessoCard({
         </button>
       )}
 
-      <div className="flex items-start justify-between mb-2">
+      {/* Badge de ordem no fluxo para processos paralelos (deptIndependente) */}
+      {processo.deptIndependente && temFluxo && (
+        (() => {
+          const ordemNoDept = fluxo.indexOf(departamento?.id) + 1;
+          return ordemNoDept > 0 ? (
+            <div
+              className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full flex items-center justify-center z-10 shadow-sm bg-indigo-500 text-white text-[10px] font-bold border-2 border-white"
+              title={`Ordem no fluxo: ${ordemNoDept}º de ${fluxo.length} — Departamentos trabalham em paralelo`}
+            >
+              {ordemNoDept}
+            </div>
+          ) : null;
+        })()
+      )}
+
+      <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0 mr-2">
           {processo.nomeServico && (
             <div
-              className="text-medium font-semibold text-blue-600 mb-1 leading-tight truncate cursor-help"
+              className="text-sm font-bold text-blue-700 dark:text-blue-400 mb-1.5 leading-snug line-clamp-2 cursor-help"
               title={processo.nomeServico}
             >
               {processo.nomeServico}
             </div>
           )}
 
-          <div className="mb-0.5">
+          <div className="mb-1">
             <div
-              className="font-base text-sm text-gray-700 truncate cursor-help"
+              className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2 cursor-help leading-snug"
               title={processo.nomeEmpresa}
             >
               {processo.nomeEmpresa || 'Nova Empresa'}
             </div>
 
             {(processo.tags || []).length > 0 && (
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                 {((processo.tags || []) as number[])
                   .slice(0, 6)
                   .map((tagId) => {
@@ -208,7 +261,7 @@ export default function ProcessoCard({
                     return tag ? (
                       <div
                         key={tagId}
-                        className={`w-2 h-2 rounded-full ${tag.cor} border border-white shadow-sm flex-shrink-0`}
+                        className={`w-2.5 h-2.5 rounded-full ${tag.cor} border border-white shadow-sm flex-shrink-0`}
                         title={tag.nome}
                       />
                     ) : null;
@@ -220,12 +273,34 @@ export default function ProcessoCard({
             )}
           </div>
 
-          <p className="text-xs text-gray-600 truncate cursor-help" title={processo.cliente}>
-            {processo.cliente || 'Sem responsável'}
-          </p>
+          {/* Responsável */}
+          {(() => {
+            const resp = (processo as any).responsavel;
+            const respNome = typeof resp === 'object' && resp?.nome ? resp.nome : typeof resp === 'string' ? resp : null;
+            return (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1 truncate" title={respNome || 'Sem responsável'}>
+                <UserIcon size={10} className="flex-shrink-0" />
+                {respNome || 'Sem responsável'}
+              </p>
+            );
+          })()}
+
         </div>
 
         <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+          {/* Botão Editar */}
+          {podeEditarProcesso && processo.status === 'em_andamento' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditando(!editando);
+              }}
+              className={`px-2 py-1 rounded-lg text-xs transition-colors flex items-center gap-1 flex-shrink-0 ${editando ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-500'}`}
+              title="Editar solicitação"
+            >
+              <Edit3 size={10} />
+            </button>
+          )}
           {podeAcessarTags && (
             <button
               onClick={(e) => {
@@ -278,6 +353,50 @@ export default function ProcessoCard({
           )}
         </div>
       </div>
+
+      {/* Painel de edição inline */}
+      {editando && (
+        <div className="bg-white dark:bg-gray-700 border border-blue-200 dark:border-blue-600 rounded-lg p-3 mb-3 space-y-2 shadow-md" onClick={(e) => e.stopPropagation()}>
+          <div>
+            <label className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Empresa</label>
+            <input
+              type="text"
+              value={editNomeEmpresa}
+              onChange={(e) => setEditNomeEmpresa(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-500 rounded bg-gray-50 dark:bg-gray-600 text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Responsável</label>
+            <select
+              value={editResponsavelId || ''}
+              onChange={(e) => setEditResponsavelId(e.target.value ? Number(e.target.value) : undefined)}
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-500 rounded bg-gray-50 dark:bg-gray-600 text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-blue-400"
+            >
+              <option value="">Sem responsável</option>
+              {(usuarios || []).filter(u => u.ativo !== false).map(u => (
+                <option key={u.id} value={u.id}>{u.nome}{u.departamentoId ? ` (${departamentos.find(d => d.id === u.departamentoId)?.nome || ''})` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleSaveEdit}
+              disabled={salvandoEdit}
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium disabled:opacity-50"
+            >
+              <Save size={10} />
+              {salvandoEdit ? 'Salvando...' : 'Salvar'}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setEditando(false); }}
+              className="px-3 py-1.5 bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 rounded text-xs hover:bg-gray-300"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 mb-2 flex-wrap">
         <div className="relative">
@@ -377,30 +496,46 @@ export default function ProcessoCard({
 
             {podeExibirAcoesNoCard && podeMover && (
               <>
-                {podeAvancarNoFluxo && !isUltimo && (
+                {processo.deptIndependente ? (
+                  /* Para processos paralelos: botão "Concluir Dept" em todos */
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       void onAvancar(processo.id);
                     }}
-                    className="col-span-2 w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white px-2 py-1 rounded text-xs transition-colors flex items-center justify-center gap-1"
-                  >
-                    <ArrowRight size={10} />
-                    Avançar{temFluxo ? ` (${idxAtual + 1}/${fluxo.length})` : ''}
-                  </button>
-                )}
-
-                {isUltimo && podeFinalizar && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void onFinalizar(processo.id);
-                    }}
-                    className="col-span-2 w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-white px-2 py-1 rounded text-xs transition-colors flex items-center justify-center gap-1"
+                    className="col-span-2 w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-2 py-1 rounded text-xs transition-colors flex items-center justify-center gap-1"
                   >
                     <CheckCircle size={10} />
-                    Finalizar
+                    Concluir Dept ({fluxo.indexOf(departamento?.id) + 1}/{fluxo.length})
                   </button>
+                ) : (
+                  <>
+                    {podeAvancarNoFluxo && !isUltimo && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void onAvancar(processo.id);
+                        }}
+                        className="col-span-2 w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white px-2 py-1 rounded text-xs transition-colors flex items-center justify-center gap-1"
+                      >
+                        <ArrowRight size={10} />
+                        Avançar{temFluxo ? ` (${idxAtual + 1}/${fluxo.length})` : ''}
+                      </button>
+                    )}
+
+                    {isUltimo && podeFinalizar && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void onFinalizar(processo.id);
+                        }}
+                        className="col-span-2 w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-white px-2 py-1 rounded text-xs transition-colors flex items-center justify-center gap-1"
+                      >
+                        <CheckCircle size={10} />
+                        Finalizar
+                      </button>
+                    )}
+                  </>
                 )}
               </>
             )}

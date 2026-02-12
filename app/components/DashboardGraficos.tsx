@@ -437,6 +437,77 @@ export default function DashboardGraficos() {
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [filtroPrioridade, setFiltroPrioridade] = useState<string>('todos');
   const [showFiltros, setShowFiltros] = useState(true);
+  const [exclusoesData, setExclusoesData] = useState<{
+    totalExcluidos: number;
+    motivosExclusao: { motivo: string; count: number }[];
+    exclusoesPorMes: { mes: string; count: number }[];
+    usuarios?: { id: number; nome: string }[];
+    departamentos?: { id: number; nome: string }[];
+    motivosUnicos?: string[];
+  } | null>(null);
+
+  // Filtros de exclusão
+  const [excPeriodo, setExcPeriodo] = useState<string>('todos');
+  const [excDeptId, setExcDeptId] = useState<string>('todos');
+  const [excUsuarioId, setExcUsuarioId] = useState<string>('todos');
+  const [excMotivo, setExcMotivo] = useState<string>('todos');
+  const [excShowFiltros, setExcShowFiltros] = useState(false);
+  const [excLoading, setExcLoading] = useState(false);
+
+  // Listas para dropdowns de exclusão (carregadas 1x)
+  const [excUsuariosLista, setExcUsuariosLista] = useState<{ id: number; nome: string }[]>([]);
+  const [excDeptLista, setExcDeptLista] = useState<{ id: number; nome: string }[]>([]);
+  const [excMotivosLista, setExcMotivosLista] = useState<string[]>([]);
+
+  // Carregar dados de exclusão via analytics
+  const carregarExclusoes = React.useCallback(async (periodoVal?: string, deptVal?: string, userVal?: string, motivoVal?: string) => {
+    setExcLoading(true);
+    try {
+      const params = new URLSearchParams({ periodo: '365' });
+      const p = periodoVal ?? excPeriodo;
+      const d = deptVal ?? excDeptId;
+      const u = userVal ?? excUsuarioId;
+      const m = motivoVal ?? excMotivo;
+      if (p !== 'todos') params.set('excPeriodo', p);
+      if (d !== 'todos') params.set('excDeptId', d);
+      if (u !== 'todos') params.set('excUsuarioId', u);
+      if (m !== 'todos') params.set('excMotivo', m);
+
+      const res = await fetch(`/api/analytics?${params.toString()}`, { credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.exclusoes) {
+        setExclusoesData(data.exclusoes);
+        // Carregar listas de dropdown só na primeira vez
+        if (data.exclusoes.usuarios?.length && excUsuariosLista.length === 0) {
+          setExcUsuariosLista(data.exclusoes.usuarios);
+        }
+        if (data.exclusoes.departamentos?.length && excDeptLista.length === 0) {
+          setExcDeptLista(data.exclusoes.departamentos);
+        }
+        if (data.exclusoes.motivosUnicos?.length && excMotivosLista.length === 0) {
+          setExcMotivosLista(data.exclusoes.motivosUnicos);
+        }
+      }
+    } catch {
+      // silencioso
+    } finally {
+      setExcLoading(false);
+    }
+  }, [excPeriodo, excDeptId, excUsuarioId, excMotivo, excUsuariosLista.length, excDeptLista.length, excMotivosLista.length]);
+
+  React.useEffect(() => {
+    carregarExclusoes();
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const excFiltrosAtivos = excPeriodo !== 'todos' || excDeptId !== 'todos' || excUsuarioId !== 'todos' || excMotivo !== 'todos';
+  const resetarFiltrosExc = () => {
+    setExcPeriodo('todos');
+    setExcDeptId('todos');
+    setExcUsuarioId('todos');
+    setExcMotivo('todos');
+    carregarExclusoes('todos', 'todos', 'todos', 'todos');
+  };
 
   // Processos filtrados
   const processosFiltrados = useMemo(() => {
@@ -567,7 +638,8 @@ export default function DashboardGraficos() {
   const filtrosAtivos = periodo !== 'todos' || filtroDept !== null || filtroStatus !== 'todos' || filtroPrioridade !== 'todos';
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 sm:py-8 space-y-6">
+    <div className="space-y-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 sm:py-8 space-y-6">
       {/* Cabeçalho */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -949,7 +1021,217 @@ export default function DashboardGraficos() {
             </table>
           </div>
         </div>
+
+        {/* Fecha o container max-w-7xl */}
       </div>
-    </div>
+
+      {/* ────────── SEÇÃO: Exclusões / Lixeira (largura total da página) ────────── */}
+      {exclusoesData && exclusoesData.totalExcluidos >= 0 && (
+        <div className="w-full px-3 sm:px-6 lg:px-8">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 sm:p-10 shadow-lg border border-gray-100 dark:border-gray-700 w-full">
+            {/* Header + botões de filtro */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="bg-gradient-to-br from-red-500 to-rose-600 p-3 rounded-xl">
+                  <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Análise de Exclusões</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {exclusoesData.totalExcluidos} processo{exclusoesData.totalExcluidos !== 1 ? 's' : ''} excluído{exclusoesData.totalExcluidos !== 1 ? 's' : ''}
+                    {excFiltrosAtivos && <span className="ml-1 text-red-500 font-semibold">(filtrado)</span>}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setExcShowFiltros(!excShowFiltros)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all font-medium text-sm ${
+                    excShowFiltros
+                      ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300'
+                      : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  <Filter size={16} />
+                  Filtros
+                  {excFiltrosAtivos && (
+                    <span className="bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">!</span>
+                  )}
+                </button>
+                {excFiltrosAtivos && (
+                  <button
+                    onClick={resetarFiltrosExc}
+                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all text-sm font-medium"
+                  >
+                    <RefreshCw size={14} />
+                    Limpar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Painel de filtros de exclusão */}
+            {excShowFiltros && (
+              <div className="bg-red-50/50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-800/50 p-4 sm:p-6 mb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Período */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
+                      Período
+                    </label>
+                    <div className="relative">
+                      <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <select
+                        value={excPeriodo}
+                        onChange={(e) => { setExcPeriodo(e.target.value); carregarExclusoes(e.target.value, excDeptId, excUsuarioId, excMotivo); }}
+                        className="w-full pl-10 pr-8 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent appearance-none"
+                      >
+                        <option value="todos">Todo o período</option>
+                        <option value="7">Últimos 7 dias</option>
+                        <option value="30">Últimos 30 dias</option>
+                        <option value="90">Últimos 90 dias</option>
+                        <option value="180">Últimos 6 meses</option>
+                        <option value="365">Último ano</option>
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Departamento */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
+                      Departamento
+                    </label>
+                    <div className="relative">
+                      <Building size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <select
+                        value={excDeptId}
+                        onChange={(e) => { setExcDeptId(e.target.value); carregarExclusoes(excPeriodo, e.target.value, excUsuarioId, excMotivo); }}
+                        className="w-full pl-10 pr-8 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent appearance-none"
+                      >
+                        <option value="todos">Todos os departamentos</option>
+                        {(excDeptLista.length > 0 ? excDeptLista : departamentos).map((d) => (
+                          <option key={d.id} value={d.id}>{d.nome}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Quem excluiu */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
+                      Excluído por
+                    </label>
+                    <div className="relative">
+                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                      <select
+                        value={excUsuarioId}
+                        onChange={(e) => { setExcUsuarioId(e.target.value); carregarExclusoes(excPeriodo, excDeptId, e.target.value, excMotivo); }}
+                        className="w-full pl-10 pr-8 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent appearance-none"
+                      >
+                        <option value="todos">Todos os usuários</option>
+                        {excUsuariosLista.map((u) => (
+                          <option key={u.id} value={u.id}>{u.nome}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Motivo */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
+                      Motivo
+                    </label>
+                    <div className="relative">
+                      <AlertTriangle size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <select
+                        value={excMotivo}
+                        onChange={(e) => { setExcMotivo(e.target.value); carregarExclusoes(excPeriodo, excDeptId, excUsuarioId, e.target.value); }}
+                        className="w-full pl-10 pr-8 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent appearance-none"
+                      >
+                        <option value="todos">Todos os motivos</option>
+                        {excMotivosLista.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Loading */}
+            {excLoading && (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
+                <span className="ml-3 text-gray-500 dark:text-gray-400 text-sm">Carregando dados...</span>
+              </div>
+            )}
+
+            {/* Conteúdo dos gráficos */}
+            {!excLoading && exclusoesData && exclusoesData.totalExcluidos > 0 ? (
+              <div className="space-y-10">
+                {exclusoesData.motivosExclusao.length > 0 && (
+                  <div className="w-full">
+                    <h4 className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-5">Motivos de Exclusão</h4>
+                    <div className="space-y-5">
+                      {exclusoesData.motivosExclusao.map((m, idx) => {
+                        const pct = exclusoesData.totalExcluidos > 0 ? Math.round((m.count / exclusoesData.totalExcluidos) * 100) : 0;
+                        const cores = ['bg-red-500', 'bg-orange-500', 'bg-amber-500', 'bg-yellow-500', 'bg-rose-400', 'bg-pink-400'];
+                        return (
+                          <div key={m.motivo}>
+                            <div className="flex justify-between text-sm mb-2 gap-2">
+                              <span className="text-gray-700 dark:text-gray-300 min-w-0 flex-1" title={m.motivo}>{m.motivo}</span>
+                              <span className="text-gray-500 font-semibold whitespace-nowrap flex-shrink-0">{m.count} ({pct}%)</span>
+                            </div>
+                            <div className="w-full h-6 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <div className={`h-full ${cores[idx % cores.length]} rounded-full`} style={{ width: `${Math.max(pct, 2)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {exclusoesData.exclusoesPorMes.length > 0 && (
+                  <div className="w-full">
+                    <h4 className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-5">Exclusões por Mês</h4>
+                    <div className="flex items-end gap-3 sm:gap-6 px-2" style={{ height: '360px' }}>
+                      {exclusoesData.exclusoesPorMes.map((m) => {
+                        const maxVal = Math.max(...exclusoesData.exclusoesPorMes.map(x => x.count), 1);
+                        const h = m.count > 0 ? Math.max((m.count / maxVal) * 100, 8) : 0;
+                        return (
+                          <div key={m.mes} className="flex-1 flex flex-col items-center justify-end gap-2 h-full min-w-0">
+                            <span className="text-sm font-bold text-gray-700 dark:text-gray-300">{m.count}</span>
+                            <div
+                              className="w-full mx-auto bg-gradient-to-t from-red-500 to-rose-400 rounded-t-lg"
+                              style={{ height: `${h}%`, minHeight: m.count > 0 ? '12px' : '0px' }}
+                            />
+                            <span className="text-xs text-gray-500 dark:text-gray-400 truncate w-full text-center font-medium">{m.mes}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* Estado vazio (com filtros) */}
+            {!excLoading && exclusoesData && exclusoesData.totalExcluidos === 0 && excFiltrosAtivos ? (
+              <div className="text-center py-12">
+                <XCircle size={48} className="mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                <p className="text-gray-500 dark:text-gray-400 text-lg font-medium">Nenhuma exclusão encontrada</p>
+                <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">Tente ajustar os filtros para ver resultados</p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+    </div></div>
   );
 }

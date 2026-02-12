@@ -237,6 +237,26 @@ export async function POST(
       },
     });
 
+    // Auto-atribuir responsável ao gerente do departamento destino
+    try {
+      const gerenteDestino = await prisma.usuario.findFirst({
+        where: {
+          ativo: true,
+          role: 'GERENTE',
+          departamentoId: proximoDepartamentoId,
+        },
+        select: { id: true, nome: true },
+      });
+      if (gerenteDestino) {
+        await prisma.processo.update({
+          where: { id: processoId },
+          data: { responsavelId: gerenteDestino.id },
+        });
+      }
+    } catch {
+      // Não bloquear avanço se falhar
+    }
+
     // Criar notificações persistidas: somente gerentes do dept destino e responsável do processo (se definido)
     try {
       const gerentesDestino = await prisma.usuario.findMany({

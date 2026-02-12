@@ -4,7 +4,7 @@ import React from 'react';
 import {
   CheckCircle, ArrowRight, FileText, Upload, MessageSquare, 
   Star, Edit, Trash2, User, Calendar, Clock, Activity,
-  AlertCircle, Flag, PlayCircle, XCircle, PauseCircle
+  AlertCircle, Flag, PlayCircle, XCircle, PauseCircle, Link2
 } from 'lucide-react';
 import { formatarData } from '@/app/utils/helpers';
 
@@ -20,6 +20,10 @@ export interface HistoricoEvento {
   departamento?: string;
   data: string | Date;
   detalhes?: any;
+  // Campos de interligação
+  isInterligado?: boolean;
+  processoOrigemId?: number;
+  processoOrigemNome?: string;
 }
 
 interface HistoricoTimelineProps {
@@ -103,19 +107,31 @@ export default function HistoricoTimeline({ historico, compact = false }: Histor
           const { data, hora } = formatarDataHora(evento.data);
           const isFirst = index === 0;
 
+          const isLinked = !!(evento as any).isInterligado;
+          const linkedName = (evento as any).processoOrigemNome || '';
+
           return (
             <div key={evento.id} className="relative pl-16 pr-4">
               {/* Ícone */}
-              <div className={`absolute left-3 w-10 h-10 rounded-full border-2 flex items-center justify-center ${getCorEvento(evento.tipo)} ${isFirst ? 'ring-4 ring-blue-200 dark:ring-blue-800' : ''}`}>
-                {getIconeEvento(evento.tipo)}
+              <div className={`absolute left-3 w-10 h-10 rounded-full border-2 flex items-center justify-center ${isLinked ? 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700' : getCorEvento(evento.tipo)} ${isFirst ? 'ring-4 ring-blue-200 dark:ring-blue-800' : ''}`}>
+                {isLinked ? <Link2 className="w-5 h-5 text-purple-600" /> : getIconeEvento(evento.tipo)}
               </div>
 
               {/* Conteúdo */}
-              <div className={`bg-white dark:bg-gray-800 rounded-lg border ${getCorEvento(evento.tipo)} p-4 shadow-sm hover:shadow-md transition-shadow ${isFirst ? 'ring-2 ring-blue-300 dark:ring-blue-600' : ''}`}>
+              <div className={`rounded-lg border p-4 shadow-sm hover:shadow-md transition-shadow ${isLinked ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-700 border-l-4 border-l-purple-400' : `bg-white dark:bg-gray-800 ${getCorEvento(evento.tipo)}`} ${isFirst ? 'ring-2 ring-blue-300 dark:ring-blue-600' : ''}`}>
+                {/* Badge de interligação */}
+                {isLinked && linkedName && (
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Link2 className="w-3.5 h-3.5 text-purple-500" />
+                    <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/40 px-2 py-0.5 rounded-full">
+                      {linkedName}
+                    </span>
+                  </div>
+                )}
                 {/* Cabeçalho */}
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">
+                    <p className={`font-medium text-sm ${isLinked ? 'text-purple-800 dark:text-purple-200' : 'text-gray-900 dark:text-gray-100'}`}>
                       {evento.acao}
                     </p>
                     {evento.departamento && (

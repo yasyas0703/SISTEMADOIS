@@ -42,6 +42,15 @@ export interface Processo {
   templateId?: number;
   responsavelId?: number;
   responsavel?: Pick<Usuario, 'id' | 'nome' | 'email'>;
+  // Interligação de solicitações
+  interligadoComId?: number;
+  interligadoNome?: string;
+  // Departamentos independentes
+  deptIndependente?: boolean;
+  // Checklist por departamento  
+  checklistDepartamentos?: ChecklistDepartamentoItem[];
+  // Motivo de exclusão
+  motivoExclusao?: string;
 }
 
 export interface Departamento {
@@ -345,8 +354,69 @@ export interface ItemLixeira {
   expiraEm: Date | string;
   nomeItem: string;
   descricaoItem?: string | null;
+  motivoExclusao?: string | null;
+  motivoExclusaoCustom?: string | null;
   
   // Relações expandidas (opcionais)
   deletadoPor?: Usuario;
   diasRestantes?: number; // Calculado: dias até expirar
 }
+
+// ==================== LOGS DE AUDITORIA ====================
+
+export type TipoAcaoLog = 
+  | 'CRIAR' | 'EDITAR' | 'EXCLUIR' | 'VISUALIZAR' 
+  | 'AVANCAR' | 'VOLTAR' | 'FINALIZAR' | 'PREENCHER'
+  | 'COMENTAR' | 'ANEXAR' | 'TAG' | 'TRANSFERIR'
+  | 'INTERLIGAR' | 'CHECK' | 'LOGIN' | 'LOGOUT' | 'IMPORTAR';
+
+export interface LogAuditoria {
+  id: number;
+  usuarioId: number;
+  usuario?: Pick<Usuario, 'id' | 'nome' | 'email'>;
+  acao: TipoAcaoLog;
+  entidade: string;
+  entidadeId?: number | null;
+  entidadeNome?: string | null;
+  campo?: string | null;
+  valorAnterior?: string | null;
+  valorNovo?: string | null;
+  detalhes?: string | null;
+  processoId?: number | null;
+  empresaId?: number | null;
+  departamentoId?: number | null;
+  criadoEm: Date | string;
+}
+
+// ==================== CHECKLIST DEPARTAMENTO ====================
+
+export interface ChecklistDepartamentoItem {
+  id: number;
+  processoId: number;
+  departamentoId: number;
+  concluido: boolean;
+  concluidoPorId?: number | null;
+  concluidoEm?: Date | string | null;
+}
+
+// ==================== INTERLIGAÇÃO ====================
+
+export interface InterligacaoProcesso {
+  id: number;
+  processoOrigemId: number;
+  processoDestinoId: number;
+  criadoPorId: number;
+  automatica: boolean;
+  criadoEm: Date | string;
+}
+
+// ==================== MOTIVOS DE EXCLUSÃO PADRÃO ====================
+
+export const MOTIVOS_EXCLUSAO_PADRAO = [
+  'Cliente desistiu',
+  'Não há mais necessidade',
+  'Solicitação duplicada',
+  'Erro na criação',
+  'Empresa encerrada',
+  'Outro motivo',
+] as const;

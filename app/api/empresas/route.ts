@@ -63,14 +63,56 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await request.json();
+
+    // ========== IMPORTAÇÃO EM LOTE ==========
+    if (data.bulk === true && Array.isArray(data.empresas)) {
+      const resultados = { criadas: 0, duplicadas: 0, erros: 0, detalhes: [] as any[] };
+      for (const emp of data.empresas) {
+        try {
+          const cnpjLimpo = emp.cnpj ? String(emp.cnpj).replace(/\D/g, '') : '';
+          const temCnpjValido = cnpjLimpo.length === 14;
+          await prisma.empresa.create({
+            data: {
+              cnpj: emp.cnpj || null,
+              codigo: emp.codigo || null,
+              razao_social: emp.razao_social || emp.razaoSocial || 'Sem nome',
+              apelido: emp.apelido || null,
+              inscricao_estadual: emp.inscricao_estadual || null,
+              inscricao_municipal: emp.inscricao_municipal || null,
+              regime_federal: emp.regime_federal || null,
+              regime_estadual: emp.regime_estadual || null,
+              regime_municipal: emp.regime_municipal || null,
+              data_abertura: emp.data_abertura ? new Date(emp.data_abertura) : null,
+              estado: emp.estado || null,
+              cidade: emp.cidade || null,
+              bairro: emp.bairro || null,
+              logradouro: emp.logradouro || null,
+              numero: emp.numero || null,
+              cep: emp.cep || null,
+              email: emp.email || null,
+              telefone: emp.telefone || null,
+              cadastrada: temCnpjValido ? true : Boolean(emp.cadastrada),
+            },
+          });
+          resultados.criadas++;
+        } catch (error: any) {
+          if (error.code === 'P2002') {
+            resultados.duplicadas++;
+            resultados.detalhes.push({ empresa: emp.razao_social || emp.codigo, erro: 'duplicada' });
+          } else {
+            resultados.erros++;
+            resultados.detalhes.push({ empresa: emp.razao_social || emp.codigo, erro: String(error.message).slice(0, 120) });
+          }
+        }
+      }
+      return NextResponse.json(resultados, { status: 201 });
+    }
     
-    // Detrminar se a empresa cadastrada: precisa ter CNPJ válido (14 dígitos) ou CPF válido (11 dígitos)
-    // Mas no contexto do sistema empresas cadastradas devem ter CNPJ (14 dígitos)
+    // ========== CRIAÇÃO INDIVIDUAL ==========
+    // Determinar se a empresa cadastrada: precisa ter CNPJ válido (14 dígitos)
     const cnpjLimpo = data.cnpj ? String(data.cnpj).replace(/\D/g, '') : '';
-    const temCnpjValido = cnpjLimpo.length === 14; // CNPJ tem 14 dígitos
+    const temCnpjValido = cnpjLimpo.length === 14;
     
-    // Regra do sistema: se tem CNPJ válido (14 dígitos), é empresa cadastrada.
-    // Isso evita inconsistência quando o frontend envia `cadastrada` incorretamente.
     const empresaCadastrada = temCnpjValido ? true : Boolean(data.cadastrada);
     
     const empresa = await prisma.empresa.create({
