@@ -288,7 +288,7 @@ export async function POST(request: NextRequest) {
         const gerente = await prisma.usuario.findFirst({
           where: {
             departamentoId: departamentoInicial,
-            cargo: 'GERENTE',
+            role: 'GERENTE',
             ativo: true,
           },
           select: { id: true, nome: true },

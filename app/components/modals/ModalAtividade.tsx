@@ -240,7 +240,7 @@ export default function ModalAtividade({ onClose, templateToEdit }: ModalAtivida
                 <Workflow size={22} /> Nova Atividade
               </h3>
               <p className="text-white/80 text-sm mt-1">
-                Crie o questionário e defina o fluxo. Depois salve como template para usar em "Nova Solicitação".
+                Crie o questionário e defina o fluxo. Depois salve como template para usar em &ldquo;Nova Solicitação&rdquo;.
               </p>
             </div>
             <button onClick={onClose} className="text-white hover:bg-white/20 p-2 rounded-lg">

@@ -99,18 +99,62 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Limpa códigos expirados/usados antes de checar rate limit
+    // ===== VERIFICAÇÃO RECENTE: se o email já foi verificado nos últimos 7 dias, pula 2FA =====
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const sevenDaysAgo = new Date(Date.now() - SEVEN_DAYS_MS);
+
+    const recentVerification = await prisma.emailVerificationCode.findFirst({
+      where: {
+        usuarioId: usuario.id,
+        used: true,
+        createdAt: { gte: sevenDaysAgo },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (recentVerification) {
+      // Email já foi verificado recentemente — emitir token diretamente
+      const token = generateToken({ userId: usuario.id, email: usuario.email, role: usuario.role });
+
+      const response = NextResponse.json({
+        usuario: {
+          id: usuario.id,
+          nome: usuario.nome,
+          email: usuario.email,
+          role: usuario.role,
+          ativo: usuario.ativo,
+          departamentoId: usuario.departamentoId,
+          permissoes: usuario.permissoes,
+        },
+        token,
+      });
+
+      response.cookies.set('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7,
+      });
+
+      return response;
+    }
+    // ===== FIM DA VERIFICAÇÃO RECENTE =====
+
+    // Limpa códigos expirados (mas NÃO os usados recentes — precisamos deles para a verificação acima)
     await prisma.emailVerificationCode.deleteMany({
       where: {
         usuarioId: usuario.id,
-        OR: [{ used: true }, { expiresAt: { lt: new Date() } }],
+        OR: [
+          { used: true, createdAt: { lt: sevenDaysAgo } },
+          { expiresAt: { lt: new Date() }, used: false },
+        ],
       },
     });
 
     // Rate limit: impede novo envio se o último código foi criado há menos de 2 minutos
     const RATE_LIMIT_MS = 2 * 60 * 1000; // 2 minutos
     const last = await prisma.emailVerificationCode.findFirst({
-      where: { usuarioId: usuario.id },
+      where: { usuarioId: usuario.id, used: false },
       orderBy: { createdAt: 'desc' },
     });
 
